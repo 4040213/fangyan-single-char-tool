@@ -32,6 +32,7 @@ data/*.png
 data/stoke.dat
 data/tempword.*
 data/word.*
+data/META-INF/
 
 # ===== 备份文件（本地修改快照，不入库） =====
 *.bak
