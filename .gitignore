@@ -1,0 +1,56 @@
+# ===== 系统二进制与运行环境（南科大 FYCL 系统文件，不入库） =====
+FYCL.exe
+fycl.exe4j
+fycl.nsi
+uninst.exe
+home.ico
+jre/
+lib/
+FYDB/
+configuration/
+html/
+icons/
+ImageMagick/
+soundToPicture/
+webapps/
+log/
+derby.log
+error.log
+output.log
+cache.xml
+*.dll
+*.vm
+
+# ===== 数据样本（系统自带，非工具产出） =====
+data/BD.CSV
+data/BD_Old.csv
+data/*.doc
+data/*.wav
+data/*.gif
+data/*.jpg
+data/*.png
+data/stoke.dat
+data/tempword.*
+data/word.*
+
+# ===== 备份文件（本地修改快照，不入库） =====
+*.bak
+*.bak_check
+*.bak_audit
+fangyan_tool.html.bak*
+
+# ===== 本地草稿 / 导出产物（用户个人数据） =====
+方言草稿.json
+抽样校验表.csv
+修改历史.csv
+index_filled.json
+
+# ===== 依赖与构建产物 =====
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# ===== 临时校验脚本 =====
+_check.js
+_chk.js
