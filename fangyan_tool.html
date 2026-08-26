@@ -1125,7 +1125,7 @@ function applyDraft(d){
     toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
     shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
     wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
-    defaultTones(); diaoToTone={}; syncDiaoMap();
+    defaultTones(); syncDiaoMap();
     rebuildAll(); infer(); renderCheck();
     return;
   }
@@ -1223,10 +1223,16 @@ document.getElementById("btnAExp").addEventListener("click",function(){
     try{
       var d=JSON.parse(raw);
       applyDraft(d);                 // 恢复 maps + 回填输入框（表格已存在）
+      /* 兜底：若草稿未配置有效的方言调类（全空），套用默认（威县）4 调配置 */
+      if(dialectTones.length===0 || dialectTones.every(function(t){return !t.value;})){
+        defaultTones(); syncDiaoMap(); rebuildAll();
+      }
       renderCheck();
       setSaveStatus(d.savedAt||null);
       console.log("已自动读回上次草稿（保存于 "+fmtTime(d.savedAt)+"）");
-    }catch(e){ /* 草稿损坏则忽略 */ }
+    }catch(e){ defaultTones(); syncDiaoMap(); rebuildAll(); }
+  }else{
+    defaultTones(); syncDiaoMap(); rebuildAll();
   }
 })();
 </script>
