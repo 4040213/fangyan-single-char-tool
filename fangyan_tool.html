@@ -114,6 +114,12 @@
   .over-mark{color:#c0392b;font-size:11px;margin-left:4px;}
   .a-count{font-size:12px;color:var(--muted);margin-left:auto;}
   .a-hist-out{font-size:13px;line-height:1.7;max-height:40vh;overflow:auto;}
+  .tone-row{display:flex;gap:8px;align-items:center;margin:6px 0;}
+  .tone-row .tname{width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;}
+  .tone-row .tval{width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;}
+  .tone-row .tdel{padding:4px 10px;}
+  select.tone-sel{padding:6px 8px;border:1px solid var(--line);border-radius:6px;min-width:190px;}
+  .badge-ru{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:#A8351A;color:#fff;font-size:11px;}
   .hist-row{border-left:3px solid var(--accent2);padding:4px 10px;margin:6px 0;background:#faf9ff;}
   .hist-row .ts{color:var(--muted);font-size:11px;}
   .hist-row .src{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--soft);color:var(--accent);margin-left:6px;}
@@ -122,7 +128,7 @@
 <body>
 <header>
   <h1>方言单字声韵调自动填写工具</h1>
-  <p>基于《方言调查字表》"三表法"：声母表按中古声母分组、韵母表按中古韵母分组、声调表按中古声调×清浊分组，分别填例字读音，再自动拼合为每字完整声韵调。</p>
+  <p>基于《方言调查字表》"三表法"：声母表按中古声母分组、韵母表按中古韵母分组；声调表先定义你方言的实际调类（如 阴平/阳平/上声/去声），再把中古各类映射到对应调，自动拼合为每字完整声韵调。</p>
 </header>
 <div class="wrap">
 
@@ -183,7 +189,16 @@
     <div class="scroll"><table id="tblYun"><thead><tr><th style="width:130px">中古韵母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言韵母（IPA）</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="sec" id="sec-diao">
-    <div class="scroll"><table id="tblDiao"><thead><tr><th style="width:160px">中古声调·清浊</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言调值（IPA/数字）</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table></div>
+    <div class="card" style="margin-bottom:12px">
+      <h3 style="margin:0 0 8px">① 方言调类（你方言实际有几个调就建几个，默认 4 个）</h3>
+      <div id="toneEditor"></div>
+      <button class="btn ghost" id="btnAddTone" style="margin-top:8px">＋ 添加调类</button>
+      <div class="hint" style="margin-top:6px">每行填「调名」（如 阴平 / 阳平 / 上声 / 去声）+「调值」（如 55 / 21 / 214）。这些就是你方言的<b>声调格局</b>。</div>
+    </div>
+    <div class="scroll">
+      <table id="tblDiao"><thead><tr><th style="width:170px">中古声调·清浊</th><th style="width:200px">例字（字数）</th><th style="width:220px">归到的方言调</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="hint" style="margin-top:6px">把每个中古调类用下拉选到对应的方言调。哪些中古类合并成一个方言调、哪个分裂，一目了然——这就是声调格局。</div>
   </div>
     </div>
   </div>
@@ -335,6 +350,26 @@ entries.forEach(function(e){
 
 /* state maps: 中古类别 -> IPA */
 var shengMap={}, yunMap={}, diaoMap={};
+/* 声调模型 v2：以“方言实际调类”为核心。
+   dialectTones = 方言调类清单 [{id,name,value}]（如 [{阴平,55},{阳平,21},...]）
+   diaoToTone   = 中古调类(d|qz) -> 方言调类 id（哪些中古类归哪个方言调）
+   diaoMap[key]= 同步得到的“该中古类对应的方言调值”，仍是推断/导出唯一数据源（保持兼容） */
+var dialectTones=[], diaoToTone={}, __toneSeq=0;
+function toneById(id){ for(var i=0;i<dialectTones.length;i++){ if(dialectTones[i].id===id) return dialectTones[i]; } return null; }
+function addTone(name,value){
+  var id="T"+(++__toneSeq);
+  dialectTones.push({id:id,name:name||("调"+(dialectTones.length+1)),value:value||""});
+  return id;
+}
+function defaultTones(){ dialectTones=[]; __toneSeq=0; addTone("调①",""); addTone("调②",""); addTone("调③",""); addTone("调④",""); }
+function syncDiaoMap(){
+  if(!byDiao) return;
+  Object.keys(byDiao).forEach(function(k){
+    var tid=diaoToTone[k], t=tid?toneById(tid):null;
+    diaoMap[k]= t ? (t.value||"") : "";
+  });
+}
+defaultTones();
 
 /* ---------- UI helpers ---------- */
 var lastFocus=null;
@@ -403,7 +438,7 @@ function rebuildCurrent(){
   var s=t.dataset.t;
   if(s==="sheng") buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
   else if(s==="yun") buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ");
-  else if(s==="diao") buildTable("tblDiao",byDiao,function(k){return k.replace("|"," · ");},null,diaoMap,"如 33 / 21 / 53（入声加 ʔ）");
+  else if(s==="diao") buildDiaoTab();
   updateProgress();
 }
 /* 重建全部三张表：用于草稿读回/载入后 maps 被重新赋值的情况，
@@ -412,8 +447,69 @@ function rebuildCurrent(){
 function rebuildAll(){
   buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
   buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ");
-  buildTable("tblDiao",byDiao,function(k){return k.replace("|"," · ");},null,diaoMap,"如 33 / 21 / 53（入声加 ʔ）");
+  buildDiaoTab();
   updateProgress();
+}
+
+/* 声调表 v2：先定义“方言调类”，再把每个中古调类映射到方言调类。
+   diaoMap 仍由 syncDiaoMap() 同步得到，推断/导出/覆盖度逻辑无需改动。 */
+function buildDiaoTab(){
+  /* 一次性绑定“添加调类”按钮（静态 HTML 已存在） */
+  if(!window.__toneBtnBound){
+    var ab=document.getElementById("btnAddTone");
+    if(ab) ab.addEventListener("click",function(){ addTone(); buildDiaoTab(); syncDiaoMap(); infer(); renderCheck(); updateProgress(); autoSave(); });
+    window.__toneBtnBound=true;
+  }
+  /* Part A: 方言调类编辑 */
+  var ed=document.getElementById("toneEditor"); ed.innerHTML="";
+  dialectTones.forEach(function(t){
+    var row=document.createElement("div"); row.className="tone-row";
+    var nm=document.createElement("input"); nm.className="tname"; nm.placeholder="调名"; nm.value=t.name;
+    var vl=document.createElement("input"); vl.className="tval"; vl.placeholder="调值 如 55"; vl.value=t.value;
+    var del=document.createElement("button"); del.className="btn ghost tdel"; del.textContent="删除";
+    nm.addEventListener("input",function(){ t.name=nm.value; refreshToneOptions(); autoSave(); });
+    vl.addEventListener("input",function(){ t.value=vl.value; syncDiaoMap(); infer(); renderCheck(); updateProgress(); autoSave(); });
+    del.addEventListener("click",function(){ removeTone(t.id); });
+    row.appendChild(nm); row.appendChild(vl); row.appendChild(del);
+    ed.appendChild(row);
+  });
+  /* Part B: 中古调类 -> 方言调 映射 */
+  var tb=document.querySelector("#tblDiao tbody"); tb.innerHTML="";
+  var keys=Object.keys(byDiao).sort(function(a,b){return a.localeCompare(b,"zh");});
+  keys.forEach(function(k){
+    var ex=exampleOf(byDiao[k]);
+    var tr=document.createElement("tr");
+    var td1=document.createElement("td"); td1.className="tg"; td1.textContent=k.replace("|"," · ");
+    if(k.indexOf("入")===0){ var bg=document.createElement("span"); bg.className="badge-ru"; bg.textContent="入声"; bg.title="入声（促声）：调值可加 ʔ 标喉塞，如 5ʔ"; td1.appendChild(bg); }
+    var td2=document.createElement("td"); td2.textContent=ex.first+" 等 "+ex.count+" 字";
+    var td3=document.createElement("td");
+    var sel=document.createElement("select"); sel.className="tone-sel";
+    var opt0=document.createElement("option"); opt0.value=""; opt0.textContent="— 未选 —"; sel.appendChild(opt0);
+    dialectTones.forEach(function(t){
+      var o=document.createElement("option"); o.value=t.id; o.textContent=(t.name||t.id)+(t.value?" ("+t.value+")":""); if(diaoToTone[k]===t.id) o.selected=true; sel.appendChild(o);
+    });
+    if(dialectTones.length===0){ var od=document.createElement("option"); od.disabled=true; od.textContent="（请先在上方添加调类）"; sel.appendChild(od); }
+    sel.addEventListener("change",function(){ if(sel.value) diaoToTone[k]=sel.value; else delete diaoToTone[k]; syncDiaoMap(); infer(); renderCheck(); updateProgress(); autoSave(); });
+    td3.appendChild(sel);
+    var td4=document.createElement("td");
+    var tid=diaoToTone[k], tt=tid?toneById(tid):null, ok=tt&&tt.value;
+    td4.textContent=ok?"✓":""; td4.className="st "+(ok?"done":"miss");
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+    tb.appendChild(tr);
+  });
+  window.__keys=keys;
+}
+function refreshToneOptions(){
+  document.querySelectorAll("#tblDiao tbody select.tone-sel").forEach(function(sel){
+    Array.prototype.forEach.call(sel.options,function(o){
+      if(!o.value) return; var t=toneById(o.value); if(t) o.textContent=(t.name||t.id)+(t.value?" ("+t.value+")":"");
+    });
+  });
+}
+function removeTone(id){
+  dialectTones=dialectTones.filter(function(t){return t.id!==id;});
+  Object.keys(diaoToTone).forEach(function(k){ if(diaoToTone[k]===id) delete diaoToTone[k]; });
+  buildDiaoTab(); syncDiaoMap(); infer(); renderCheck(); updateProgress(); autoSave();
 }
 
 /* ---------- tabs ---------- */
@@ -978,7 +1074,8 @@ function autoSave(){
   __saveTimer=setTimeout(function(){
     try{
       var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,
-              wordOverride:wordOverride,verifyData:verifyData,savedAt:Date.now(),ver:DRAFT_VERSION};
+              wordOverride:wordOverride,verifyData:verifyData,savedAt:Date.now(),ver:DRAFT_VERSION,
+              dialectTones:dialectTones,diaoToTone:diaoToTone};
       localStorage.setItem(SAVE_KEY,JSON.stringify(d));
       setSaveStatus(d.savedAt);
     }catch(e){ /* localStorage 不可用（如隐私模式）则静默降级 */ }
@@ -986,7 +1083,8 @@ function autoSave(){
 }
 /* ---------- draft ---------- */
 document.getElementById("btnSave").addEventListener("click",function(){
-  var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,savedAt:Date.now(),ver:DRAFT_VERSION};
+  var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,savedAt:Date.now(),ver:DRAFT_VERSION,
+        dialectTones:dialectTones,diaoToTone:diaoToTone};
   d.wordOverride=wordOverride; d.verifyData=verifyData;
   localStorage.setItem(SAVE_KEY,JSON.stringify(d));
   download("方言草稿.json",JSON.stringify(d,null,2),"application/json");
@@ -1004,13 +1102,27 @@ function applyDraft(d){
     toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
     shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
     wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
-    rebuildAll(); renderCheck();
+    defaultTones(); diaoToTone={}; syncDiaoMap();
+    rebuildAll(); infer(); renderCheck();
     return;
   }
   shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{};
   liZiStore=d.liZi||{};
   wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
-  rebuildAll();
+  /* 声调模型 v2：优先用新格式 dialectTones+diaoToTone；旧草稿只有扁平 diaoMap 时，
+     按“每个中古类建一个调类”重建，保证已有调值不丢 */
+  if(d.dialectTones && d.dialectTones.length){
+    dialectTones=d.dialectTones; diaoToTone=d.diaoToTone||{};
+  }else{
+    dialectTones=[]; __toneSeq=0; diaoToTone={};
+    Object.keys(byDiao).forEach(function(k){
+      var v=(d.diaoMap&&d.diaoMap[k])||"";
+      var id=addTone("调·"+k.replace("|","·"), v);
+      diaoToTone[k]=id;
+    });
+  }
+  syncDiaoMap();
+  rebuildAll(); infer();
 }
 
 /* ---------- load own index.json ---------- */
@@ -1037,7 +1149,7 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
 function buildAll(){
   buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
   buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ / əʔ");
-  buildTable("tblDiao",byDiao,function(k){return k.replace("|"," · ");},null,diaoMap,"自由输数字，如 55 / 213；入声可加 ʔ 如 5ʔ");
+  buildDiaoTab();
   updateProgress();
   renderCheck();
 }
