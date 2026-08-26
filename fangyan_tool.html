@@ -313,13 +313,20 @@ var entries = MODEL.entries || [];
 
 /* group by 中古 dimension */
 /* 声母分组键：全浊(QZ=濁)按 平/仄 拆两类，清母保持原类 —— 对应全浊清化"平送仄不送"（如並母平=pʰ/仄=p） */
-function shengKey(s,d,qz){ return qz==="濁" ? s+"·"+(d==="平"?"平":"仄") : s; }
+/* 腭化/尖团敏感声母：会因等呼(洪音一/二等 vs 细音三/四等)分化出不同现代声母，需按洪/细拆分 */
+var PALATAL_SHENG=new Set(["見","溪","羣","曉","匣","精","清","從","心","邪"]);
+function hongOrXi(deng){ return (deng==="一"||deng==="二")?"洪":"细"; }
+function shengKey(s,d,qz,deng){
+  var base = qz==="濁" ? s+"·"+(d==="平"?"平":"仄") : s;
+  if(PALATAL_SHENG.has(s)) base = base+"·"+hongOrXi(deng);
+  return base;
+}
 /* 韵母分组键：中古韵母 × 开合(HU) × 等(DENG) —— 同韵因开合/等读不同韵母（如麻: 開二=a / 開三=ia / 合二=ua） */
 function yunKey(y,hu,deng){ return y+"·"+hu+"·"+deng; }
 var bySheng={}, byYun={}, byDiao={};
 entries.forEach(function(e){
   var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
-  var sk=shengKey(s,d,qz), yk=yunKey(y,hu,deng), dk=d+"|"+qz;
+  var sk=shengKey(s,d,qz,deng), yk=yunKey(y,hu,deng), dk=d+"|"+qz;
   (bySheng[sk]=bySheng[sk]||[]).push(e);
   (byYun[yk]=byYun[yk]||[]).push(e);
   (byDiao[dk]=byDiao[dk]||[]).push(e);
@@ -521,7 +528,7 @@ function infer(){
   entries.forEach(function(e){
     var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
     var chrHex=e.CHR;                       // CHR 为 hex 编码，作为逐字覆盖键
-    var fs=shengMap[shengKey(s,d,qz)]||"", fy=yunMap[yunKey(y,hu,deng)]||"", fd=diaoMap[d+"|"+qz]||"";
+    var fs=shengMap[shengKey(s,d,qz,deng)]||"", fy=yunMap[yunKey(y,hu,deng)]||"", fd=diaoMap[d+"|"+qz]||"";
     var over=wordOverride[chrHex];
     var overAny=false;
     if(over){
@@ -937,7 +944,7 @@ document.getElementById("btnJson").addEventListener("click",function(){
 /* ---------- auto-save (localStorage, debounced) ---------- */
 var __saveTimer=null, __lastSavedAt=0;
 var SAVE_KEY="fangyan_draft";
-var DRAFT_VERSION=2; // 表结构升级版本：v2=声母全浊分平仄 + 韵母按开合+等(v1 无版本号，旧草稿需重填声韵表)
+var DRAFT_VERSION=3; // 表结构升级版本：v3=声母再加等呼细分(見溪群曉匣精清從心邪 按洪/细拆) + v2(全浊分平仄+韵母开合等分)
 function fmtTime(ts){
   if(!ts) return "未保存";
   var d=new Date(ts);
@@ -977,7 +984,7 @@ document.getElementById("btnLoadDraft").addEventListener("click",function(){
 function applyDraft(d){
   /* 旧版本草稿（声韵分组键已变）迁移：清空声韵表填写，保留逐字修改历史与抽样数据 */
   if(!d.ver || d.ver < DRAFT_VERSION){
-    toast("表结构已升级（声母全浊分平仄、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
+    toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
     shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
     wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
     rebuildCurrent(); updateProgress(); renderCheck();
@@ -1002,7 +1009,7 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
       bySheng={};byYun={};byDiao={};shengMap={};yunMap={};diaoMap={};
       entries.forEach(function(e){
         var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG);
-        var sk=shengKey(s,d,qz),yk=yunKey(y,hu,deng),dk=d+"|"+qz;
+        var sk=shengKey(s,d,qz,deng),yk=yunKey(y,hu,deng),dk=d+"|"+qz;
         (bySheng[sk]=bySheng[sk]||[]).push(e);(byYun[yk]=byYun[yk]||[]).push(e);
         (byDiao[dk]=byDiao[dk]||[]).push(e);
       });
