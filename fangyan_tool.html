@@ -312,13 +312,17 @@ var MODEL = DATA;
 var entries = MODEL.entries || [];
 
 /* group by 中古 dimension */
+/* 声母分组键：全浊(QZ=濁)按 平/仄 拆两类，清母保持原类 —— 对应全浊清化"平送仄不送"（如並母平=pʰ/仄=p） */
+function shengKey(s,d,qz){ return qz==="濁" ? s+"·"+(d==="平"?"平":"仄") : s; }
+/* 韵母分组键：中古韵母 × 开合(HU) × 等(DENG) —— 同韵因开合/等读不同韵母（如麻: 開二=a / 開三=ia / 合二=ua） */
+function yunKey(y,hu,deng){ return y+"·"+hu+"·"+deng; }
 var bySheng={}, byYun={}, byDiao={};
 entries.forEach(function(e){
-  var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ);
-  (bySheng[s]=bySheng[s]||[]).push(e);
-  (byYun[y]=byYun[y]||[]).push(e);
-  var k=d+"|"+qz;
-  (byDiao[k]=byDiao[k]||[]).push(e);
+  var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
+  var sk=shengKey(s,d,qz), yk=yunKey(y,hu,deng), dk=d+"|"+qz;
+  (bySheng[sk]=bySheng[sk]||[]).push(e);
+  (byYun[yk]=byYun[yk]||[]).push(e);
+  (byDiao[dk]=byDiao[dk]||[]).push(e);
 });
 
 /* state maps: 中古类别 -> IPA */
@@ -515,9 +519,9 @@ function infer(){
   var rows=[];
   var missing={sheng:[],yun:[],diao:[]};
   entries.forEach(function(e){
-    var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ);
+    var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
     var chrHex=e.CHR;                       // CHR 为 hex 编码，作为逐字覆盖键
-    var fs=shengMap[s]||"", fy=yunMap[y]||"", fd=diaoMap[d+"|"+qz]||"";
+    var fs=shengMap[shengKey(s,d,qz)]||"", fy=yunMap[yunKey(y,hu,deng)]||"", fd=diaoMap[d+"|"+qz]||"";
     var over=wordOverride[chrHex];
     var overAny=false;
     if(over){
@@ -933,6 +937,7 @@ document.getElementById("btnJson").addEventListener("click",function(){
 /* ---------- auto-save (localStorage, debounced) ---------- */
 var __saveTimer=null, __lastSavedAt=0;
 var SAVE_KEY="fangyan_draft";
+var DRAFT_VERSION=2; // 表结构升级版本：v2=声母全浊分平仄 + 韵母按开合+等(v1 无版本号，旧草稿需重填声韵表)
 function fmtTime(ts){
   if(!ts) return "未保存";
   var d=new Date(ts);
@@ -949,7 +954,7 @@ function autoSave(){
   __saveTimer=setTimeout(function(){
     try{
       var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,
-              wordOverride:wordOverride,verifyData:verifyData,savedAt:Date.now()};
+              wordOverride:wordOverride,verifyData:verifyData,savedAt:Date.now(),ver:DRAFT_VERSION};
       localStorage.setItem(SAVE_KEY,JSON.stringify(d));
       setSaveStatus(d.savedAt);
     }catch(e){ /* localStorage 不可用（如隐私模式）则静默降级 */ }
@@ -957,7 +962,7 @@ function autoSave(){
 }
 /* ---------- draft ---------- */
 document.getElementById("btnSave").addEventListener("click",function(){
-  var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,savedAt:Date.now()};
+  var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,savedAt:Date.now(),ver:DRAFT_VERSION};
   d.wordOverride=wordOverride; d.verifyData=verifyData;
   localStorage.setItem(SAVE_KEY,JSON.stringify(d));
   download("方言草稿.json",JSON.stringify(d,null,2),"application/json");
@@ -970,6 +975,14 @@ document.getElementById("btnLoadDraft").addEventListener("click",function(){
   applyDraft(JSON.parse(raw)); toast("已读取本地草稿");
 });
 function applyDraft(d){
+  /* 旧版本草稿（声韵分组键已变）迁移：清空声韵表填写，保留逐字修改历史与抽样数据 */
+  if(!d.ver || d.ver < DRAFT_VERSION){
+    toast("表结构已升级（声母全浊分平仄、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
+    shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
+    wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
+    rebuildCurrent(); updateProgress(); renderCheck();
+    return;
+  }
   shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{};
   liZiStore=d.liZi||{};
   wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
@@ -988,9 +1001,10 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
       MODEL=JSON.parse(rd.result); entries=MODEL.entries||[];
       bySheng={};byYun={};byDiao={};shengMap={};yunMap={};diaoMap={};
       entries.forEach(function(e){
-        var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ);
-        (bySheng[s]=bySheng[s]||[]).push(e);(byYun[y]=byYun[y]||[]).push(e);
-        (byDiao[d+"|"+qz]=byDiao[d+"|"+qz]||[]).push(e);
+        var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG);
+        var sk=shengKey(s,d,qz),yk=yunKey(y,hu,deng),dk=d+"|"+qz;
+        (bySheng[sk]=bySheng[sk]||[]).push(e);(byYun[yk]=byYun[yk]||[]).push(e);
+        (byDiao[dk]=byDiao[dk]||[]).push(e);
       });
       buildAll(); toast("已载入你的 index.json（"+entries.length+" 字）");
     }catch(err){ toast("解析失败："+err.message); }
