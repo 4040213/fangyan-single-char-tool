@@ -331,6 +331,8 @@ var entries = MODEL.entries || [];
 /* 声母分组键：全浊(QZ=濁)按 平/仄 拆两类，清母保持原类 —— 对应全浊清化"平送仄不送"（如並母平=pʰ/仄=p） */
 /* 腭化/尖团敏感声母：会因等呼(洪音一/二等 vs 细音三/四等)分化出不同现代声母，需按洪/细拆分 */
 var PALATAL_SHENG=new Set(["見","溪","羣","曉","匣","精","清","從","心","邪"]);
+var QUANZHUO_SHENG=new Set(["並","定","澄","從","邪","崇","船","禪","羣","匣","奉"]);
+var CIZHUO_SHENG  =new Set(["明","泥","來","日","疑","云","以","微"]);
 function hongOrXi(deng){ return (deng==="一"||deng==="二")?"洪":"细"; }
 function shengKey(s,d,qz,deng){
   var base = qz==="濁" ? s+"·"+(d==="平"?"平":"仄") : s;
@@ -339,10 +341,18 @@ function shengKey(s,d,qz,deng){
 }
 /* 韵母分组键：中古韵母 × 开合(HU) × 等(DENG) —— 同韵因开合/等读不同韵母（如麻: 開二=a / 開三=ia / 合二=ua） */
 function yunKey(y,hu,deng){ return y+"·"+hu+"·"+deng; }
+/* 声调分组键：入声浊母按全浊/次浊拆分，以支持入派三声类方言（如冀鲁官话威县：全浊入归阳平、次浊入归去声） */
+function diaoKey(s,d,qz){
+  if(d==="入" && qz==="濁"){
+    if(QUANZHUO_SHENG.has(s)) return "入|全浊";
+    if(CIZHUO_SHENG.has(s))   return "入|次浊";
+  }
+  return d+"|"+qz;
+}
 var bySheng={}, byYun={}, byDiao={};
 entries.forEach(function(e){
   var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
-  var sk=shengKey(s,d,qz,deng), yk=yunKey(y,hu,deng), dk=d+"|"+qz;
+  var sk=shengKey(s,d,qz,deng), yk=yunKey(y,hu,deng), dk=diaoKey(s,d,qz);
   (bySheng[sk]=bySheng[sk]||[]).push(e);
   (byYun[yk]=byYun[yk]||[]).push(e);
   (byDiao[dk]=byDiao[dk]||[]).push(e);
@@ -361,7 +371,19 @@ function addTone(name,value){
   dialectTones.push({id:id,name:name||("调"+(dialectTones.length+1)),value:value||""});
   return id;
 }
-function defaultTones(){ dialectTones=[]; __toneSeq=0; addTone("调①",""); addTone("调②",""); addTone("调③",""); addTone("调④",""); }
+function defaultTones(){
+  dialectTones=[]; __toneSeq=0;
+  addTone("阴平","24");
+  addTone("阳平","51");
+  addTone("上声","33");
+  addTone("去声","213");
+  diaoToTone={
+    "平|清":"T1", "平|濁":"T2",
+    "上|清":"T3", "上|濁":"T4",
+    "去|清":"T4", "去|濁":"T4",
+    "入|清":"T1", "入|全浊":"T2", "入|次浊":"T4"
+  };
+}
 function syncDiaoMap(){
   if(!byDiao) return;
   Object.keys(byDiao).forEach(function(k){
@@ -634,7 +656,8 @@ function infer(){
   entries.forEach(function(e){
     var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
     var chrHex=e.CHR;                       // CHR 为 hex 编码，作为逐字覆盖键
-    var fs=shengMap[shengKey(s,d,qz,deng)]||"", fy=yunMap[yunKey(y,hu,deng)]||"", fd=diaoMap[d+"|"+qz]||"";
+    var dk=diaoKey(s,d,qz);
+    var fs=shengMap[shengKey(s,d,qz,deng)]||"", fy=yunMap[yunKey(y,hu,deng)]||"", fd=diaoMap[dk]||"";
     var over=wordOverride[chrHex];
     var overAny=false;
     if(over){
@@ -644,7 +667,7 @@ function infer(){
     }
     if(!fs) missing.sheng.push(s);
     if(!fy) missing.yun.push(y);
-    if(!fd) missing.diao.push(d+"|"+qz);
+    if(!fd) missing.diao.push(dk);
     rows.push({chr:dec(e.CHR),chrHex:chrHex,ms:s,my:y,md:d,mqz:qz,fs:fs,fy:fy,fd:fd,
                over:overAny, hist:over?over.hist:null, raw:e});
   });
@@ -1112,7 +1135,7 @@ function applyDraft(d){
   /* 声调模型 v2：优先用新格式 dialectTones+diaoToTone；旧草稿只有扁平 diaoMap 时，
      按“每个中古类建一个调类”重建，保证已有调值不丢 */
   if(d.dialectTones && d.dialectTones.length){
-    dialectTones=d.dialectTones; diaoToTone=d.diaoToTone||{};
+    dialectTones=d.dialectTones; diaoToTone=migrateDiaoToTone(d.diaoToTone||{});
   }else{
     dialectTones=[]; __toneSeq=0; diaoToTone={};
     Object.keys(byDiao).forEach(function(k){
@@ -1123,6 +1146,14 @@ function applyDraft(d){
   }
   syncDiaoMap();
   rebuildAll(); infer();
+}
+function migrateDiaoToTone(map){
+  var out={};
+  Object.keys(map).forEach(function(k){
+    if(k==="入|濁"){ out["入|全浊"]=map[k]; out["入|次浊"]=map[k]; }
+    else{ out[k]=map[k]; }
+  });
+  return out;
 }
 
 /* ---------- load own index.json ---------- */
@@ -1135,7 +1166,7 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
       bySheng={};byYun={};byDiao={};shengMap={};yunMap={};diaoMap={};
       entries.forEach(function(e){
         var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG);
-        var sk=shengKey(s,d,qz,deng),yk=yunKey(y,hu,deng),dk=d+"|"+qz;
+        var sk=shengKey(s,d,qz,deng),yk=yunKey(y,hu,deng),dk=diaoKey(s,d,qz);
         (bySheng[sk]=bySheng[sk]||[]).push(e);(byYun[yk]=byYun[yk]||[]).push(e);
         (byDiao[dk]=byDiao[dk]||[]).push(e);
       });
@@ -1150,6 +1181,7 @@ function buildAll(){
   buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
   buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ / əʔ");
   buildDiaoTab();
+  syncDiaoMap();
   updateProgress();
   renderCheck();
 }
