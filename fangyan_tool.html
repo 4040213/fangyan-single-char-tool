@@ -406,6 +406,15 @@ function rebuildCurrent(){
   else if(s==="diao") buildTable("tblDiao",byDiao,function(k){return k.replace("|"," · ");},null,diaoMap,"如 33 / 21 / 53（入声加 ʔ）");
   updateProgress();
 }
+/* 重建全部三张表：用于草稿读回/载入后 maps 被重新赋值的情况，
+   必须重建而非只重建当前 tab，否则未重建表的输入框闭包仍指向被丢弃的旧 map 对象，
+   导致用户填写的声/韵/调写不进 infer() 实际读取的 map（典型症状：声调表填了却没被读取） */
+function rebuildAll(){
+  buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
+  buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ");
+  buildTable("tblDiao",byDiao,function(k){return k.replace("|"," · ");},null,diaoMap,"如 33 / 21 / 53（入声加 ʔ）");
+  updateProgress();
+}
 
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tab").forEach(function(t){
@@ -995,16 +1004,13 @@ function applyDraft(d){
     toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
     shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
     wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
-    rebuildCurrent(); updateProgress(); renderCheck();
+    rebuildAll(); renderCheck();
     return;
   }
   shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{};
   liZiStore=d.liZi||{};
   wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
-  document.querySelectorAll("#tblSheng input").forEach(function(i){i.value=shengMap[i.dataset.k]||"";});
-  document.querySelectorAll("#tblYun input").forEach(function(i){i.value=yunMap[i.dataset.k]||"";});
-  document.querySelectorAll("#tblDiao input").forEach(function(i){i.value=diaoMap[i.dataset.k]||"";});
-  rebuildCurrent(); updateProgress();
+  rebuildAll();
 }
 
 /* ---------- load own index.json ---------- */
