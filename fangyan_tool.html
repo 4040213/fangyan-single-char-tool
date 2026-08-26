@@ -110,6 +110,13 @@
   table.grid td{padding:6px;border-bottom:1px solid #eef1f7;vertical-align:middle;}
   table.grid tr:hover td{background:#fafbff;}
   table.grid input.vin{width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;}
+  .vcell{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+  .vbtn{width:24px;height:24px;line-height:1;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:#9aa3b2;font-size:13px;font-weight:700;}
+  .vbtn.on{background:var(--ok);border-color:var(--ok);color:#fff;}
+  .vbtn.on.bad{background:#c0392b;border-color:#c0392b;}
+  .vval{font-size:13px;padding:2px 4px;}
+  .vval.ok{color:var(--ok);font-weight:700;}
+  .vval.muted{color:#b7becb;font-size:12px;}
   table.grid input.ain{width:58px;padding:4px 5px;border:1px solid var(--line);border-radius:6px;}
   .over-mark{color:#c0392b;font-size:11px;margin-left:4px;}
   .a-count{font-size:12px;color:var(--muted);margin-left:auto;}
@@ -241,8 +248,9 @@
       <h3 style="margin:4px 0 6px">抽样校验 · 真实误差率</h3>
       <p class="hint" style="line-height:1.6;margin-bottom:12px">
         工具推断基于"同中古类同音"假设，真实误差只能由你人来核定。本模块按中古类<b>分层抽样</b>
-        （保证覆盖各声/韵/调），生成校验表：每行给出工具推演音，你填入家乡话<b>真实声韵调</b>，
-        即可算出推演值与真实值的误差率（声/韵/调分别统计），并列出错得最多的中古类。
+        （保证覆盖各声/韵/调），生成校验表：每行给出工具推演音，<b>声/韵/调各自</b>用 ✓（与家乡话一致，不打字）
+        或 ✗（不一致，弹出音标框填正确音）判定，即可算出推演值与真实值的误差率（声/韵/调分别统计），
+        并列出错得最多的中古类。多数字直接点 ✓ 即可，只有少数 ✗ 的才需用左侧音标面板填。
       </p>
       <div class="verify-ctrl">
         <label>样本量：
@@ -256,6 +264,8 @@
         </label>
         <button id="btnVGen" class="btn">生成抽样表</button>
         <button id="btnVCalc" class="btn">计算误差</button>
+        <button id="btnVAllOk" class="btn ghost">全部标✓</button>
+        <button id="btnVClearJ" class="btn ghost">清空判定</button>
         <button id="btnVExp" class="btn ghost">导出校验表</button>
       </div>
       <div id="vResult" class="v-result"></div>
@@ -828,7 +838,8 @@ function genVerifySample(){
     var prev=oldMap[r.chrHex]||{};
     return {chr:r.chrHex, ch:r.chr, ms:r.ms, my:r.my, md:r.md,
             fs:r.fs, fy:r.fy, fd:r.fd,
-            rs:prev.rs||"", ry:prev.ry||"", rd:prev.rd||""};
+            rs:prev.rs||"", ry:prev.ry||"", rd:prev.rd||"",
+            rsState:prev.rsState||"", ryState:prev.ryState||"", rdState:prev.rdState||""};
   });
   renderVerifyTable();
   toast("已生成 "+verifyData.sample.length+" 字抽样表");
@@ -836,23 +847,43 @@ function genVerifySample(){
 
 function renderVerifyTable(){
   var wrap=document.getElementById("vTableWrap");
-  if(!verifyData.sample.length){ wrap.innerHTML='<p class="hint">点击「生成抽样表」开始。</p>'; return; }
+  if(!verifyData.sample.length){ wrap.innerHTML='<p class="hint">点击「生成抽样表」开始。每行给出工具推演音，用 ✓ 标"与家乡话一致"（不打字），✗ 标"不一致"并弹出音标框填写正确音。</p>'; return; }
+  function vCell(s,idx,f,inf){
+    var st=s[f+"State"]||"", real=s[f]||"";
+    var html='<div class="vcell">'
+      +'<button class="vbtn '+(st==="ok"?"on":"")+'" data-i="'+idx+'" data-f="'+f+'" data-act="ok" title="与推演一致">✓</button>'
+      +'<button class="vbtn '+(st==="bad"?"on bad":"")+'" data-i="'+idx+'" data-f="'+f+'" data-act="bad" title="不一致，需改">✗</button>';
+    if(st==="ok"){ html+='<span class="vval ok">'+inf+'</span>'; }
+    else if(st==="bad"){ html+='<input class="vin" data-i="'+idx+'" data-f="'+f+'" value="'+real.replace(/"/g,'&quot;')+'" placeholder="填正确音">'; }
+    else { html+='<span class="vval muted">待判定</span>'; }
+    html+='</div>';
+    return html;
+  }
   var h='<table class="grid"><thead><tr><th>字</th><th>中古声</th><th>中古韵</th><th>中古调</th>'
        +'<th>推演声</th><th>推演韵</th><th>推演调</th><th>真实声</th><th>真实韵</th><th>真实调</th></tr></thead><tbody>';
   verifyData.sample.forEach(function(s,idx){
     h+='<tr><td>'+s.ch+'</td><td>'+s.ms+'</td><td>'+s.my+'</td><td>'+s.md+'</td>'
       +'<td>'+s.fs+'</td><td>'+s.fy+'</td><td>'+s.fd+'</td>'
-      +'<td><input class="vin" data-i="'+idx+'" data-f="rs" value="'+s.rs+'"></td>'
-      +'<td><input class="vin" data-i="'+idx+'" data-f="ry" value="'+s.ry+'"></td>'
-      +'<td><input class="vin" data-i="'+idx+'" data-f="rd" value="'+s.rd+'"></td></tr>';
+      +'<td>'+vCell(s,idx,"rs",s.fs)+'</td>'
+      +'<td>'+vCell(s,idx,"ry",s.fy)+'</td>'
+      +'<td>'+vCell(s,idx,"rd",s.fd)+'</td></tr>';
   });
   h+='</tbody></table>';
   wrap.innerHTML=h;
   wrap.querySelectorAll("input.vin").forEach(function(inp){
+    inp.addEventListener("focus",function(){ lastFocus=inp; renderPalette(inp.dataset.f==="rs"?"sheng":inp.dataset.f==="ry"?"yun":"diao"); });
     inp.addEventListener("input",function(){
-      var i=+inp.dataset.i, f=inp.dataset.f;
-      verifyData.sample[i][f]=inp.value.trim();
+      verifyData.sample[+inp.dataset.i][inp.dataset.f]=inp.value.trim();
       autoSave();
+    });
+  });
+  wrap.querySelectorAll("button.vbtn").forEach(function(b){
+    b.addEventListener("click",function(){
+      var i=+b.dataset.i, f=b.dataset.f, act=b.dataset.act, s=verifyData.sample[i];
+      var inf = f==="rs"?s.fs : f==="ry"?s.fy : s.fd;
+      if(act==="ok"){ s[f+"State"]="ok"; s[f]=inf; }                 // 判定一致：真实=推演，无需打字
+      else { s[f+"State"]="bad"; if(s[f]===inf) s[f]=""; }            // 判定不一致：清空待填正确音
+      renderVerifyTable(); autoSave();
     });
   });
 }
@@ -893,6 +924,10 @@ function calcVerify(){
   }else{
     html+='<p class="ok">✓ 已核字全部一致，抽样内推断准确。</p>';
   }
+  // 已标✗但未填真实音的待改项
+  var pending=0;
+  sample.forEach(function(s){ ["rs","ry","rd"].forEach(function(f){ if(s[f+"State"]==="bad" && !s[f]) pending++; }); });
+  if(pending){ html+='<p class="hint">另有 '+pending+' 处已标 ✗ 但未填真实音，未计入误差率（填上正确音后即可计入）。</p>'; }
   document.getElementById("vResult").innerHTML=html;
   autoSave();
 }
@@ -1212,11 +1247,19 @@ renderPalette("sheng");   /* 初始显示声母（辅音）面板 */
 /* ---------- 抽样校验 / 全字审核 事件绑定 ---------- */
 document.getElementById("btnVGen").addEventListener("click",genVerifySample);
 document.getElementById("btnVCalc").addEventListener("click",calcVerify);
+document.getElementById("btnVAllOk").addEventListener("click",function(){
+  (verifyData.sample||[]).forEach(function(s){ s.rsState="ok"; s.rs=s.fs; s.ryState="ok"; s.ry=s.fy; s.rdState="ok"; s.rd=s.fd; });
+  renderVerifyTable(); autoSave(); toast("已将全部抽样字的声/韵/调标记为与推演一致（✓）");
+});
+document.getElementById("btnVClearJ").addEventListener("click",function(){
+  (verifyData.sample||[]).forEach(function(s){ s.rsState=""; s.ryState=""; s.rdState=""; s.rs=""; s.ry=""; s.rd=""; });
+  renderVerifyTable(); autoSave(); toast("已清空所有判定");
+});
 document.getElementById("btnVExp").addEventListener("click",function(){
   if(!verifyData.sample.length){ toast("无数据可导出"); return; }
-  var lines=[["字","中古声","中古韵","中古调","推演声","推演韵","推演调","真实声","真实韵","真实调"]];
+  var lines=[["字","中古声","中古韵","中古调","推演声","推演韵","推演调","真实声","真实韵","真实调","声判定","韵判定","调判定"]];
   verifyData.sample.forEach(function(s){
-    lines.push([s.ch,s.ms,s.my,s.md,s.fs,s.fy,s.fd,s.rs,s.ry,s.rd]);
+    lines.push([s.ch,s.ms,s.my,s.md,s.fs,s.fy,s.fd,s.rs,s.ry,s.rd,s.rsState||"",s.ryState||"",s.rdState||""]);
   });
   download("抽样校验表.csv", csvFrom(lines));
 });
