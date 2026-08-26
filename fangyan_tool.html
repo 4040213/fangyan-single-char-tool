@@ -190,6 +190,7 @@
 
   <div class="sec" id="sec-preview">
     <div class="card">
+      <button id="btnInferPreview" class="btn">一键推断全表</button>
       <input type="text" id="search" placeholder="搜索汉字 / 中古音…" style="width:260px"/>
       <span class="hint"> 共 <b id="pvCount">0</b> 字</span>
       <span id="pvWarn" class="miss"></span>
@@ -387,7 +388,7 @@ function buildTable(tblId, mapObj, keyFn, valFn, store, ph){
     inp.type="text"; inp.className="ipa"; inp.placeholder=ph; inp.dataset.k=k; inp.dataset.store=store;
     inp.value=store[k]||"";
     inp.addEventListener("focus",function(){lastFocus=inp;});
-    inp.addEventListener("input",function(){store[k]=inp.value.trim();updateProgress();autoSave();if(window.__chkT)clearTimeout(window.__chkT);window.__chkT=setTimeout(renderCheck,250);});
+    inp.addEventListener("input",function(){store[k]=inp.value.trim();updateProgress();autoSave();if(window.__chkT)clearTimeout(window.__chkT);window.__chkT=setTimeout(function(){infer();renderCheck();},250);});
     td3.appendChild(inp);
     var td4=document.createElement("td");
     td4.className="st";
@@ -576,6 +577,13 @@ function renderPreview(){
   document.getElementById("pvWarn").textContent=msg.join("， ");
 }
 document.getElementById("search").addEventListener("input",renderPreview);
+document.getElementById("btnInfer").addEventListener("click",function(){
+  infer();                                  // 重算全表并刷新 window.__rows 缓存
+  renderPreview(); renderCheck(); renderSystem();
+  var rows=window.__rows||[];
+  var cov=rows.filter(function(r){return r.fs&&r.fy&&r.fd;}).length;
+  toast("已推断全表 "+rows.length+" 字，其中完整推断 "+cov+" 字；未覆盖类见「质检·正确率」面板");
+});
 
 /* ---------- 质检面板：记号体系检查 + 漏填提示 + 正确率 ---------- */
 function checkNotation(){
@@ -874,7 +882,7 @@ function csvFrom(rows){
   return "﻿"+lines.join("\r\n");
 }
 
-document.getElementById("btnInfer").addEventListener("click",function(){
+document.getElementById("btnInferPreview").addEventListener("click",function(){
   infer(); renderPreview(); renderSystem();
   var u=window.__uncovered||{sheng:[],yun:[],diao:[]};
   toast("推断完成：声母未覆盖 "+u.sheng.length+" 类，韵母 "+u.yun.length+" 类，声调 "+u.diao.length+" 类");
