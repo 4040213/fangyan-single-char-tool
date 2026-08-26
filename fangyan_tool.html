@@ -50,6 +50,19 @@
        background:#fff;font-size:15px;
        font-family:"Charis SIL","Doulos SIL","Gentium Plus","Times New Roman",serif}
   .palette span:hover{border-color:var(--accent);background:var(--soft)}
+  .review-pane{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;}
+  .review-pane h3{font-size:14px;color:var(--accent);margin:0 0 6px;}
+  .rv-stat{font-size:13px;margin-bottom:8px;}
+  .rv-stat .bad{color:#c0392b;font-weight:700;}
+  .rv-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+  .rv-btns .ghost.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .rvbtn{border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;padding:2px 9px;margin-right:4px;font-size:13px;line-height:1.4;}
+  .rvbtn.ok:hover{background:var(--ok);color:#fff;border-color:var(--ok);}
+  .rvbtn.bad:hover{background:#c0392b;color:#fff;border-color:#c0392b;}
+  tr.rv-ok{background:#f3fbf5;}
+  tr.rv-ok td:first-child{border-left:3px solid var(--ok);}
+  tr.rv-bad{background:#fdf2f0;}
+  tr.rv-bad td:first-child{border-left:3px solid #c0392b;}
   .badge-ru{font-size:10px;padding:1px 6px;border-radius:5px;background:#ffece6;color:#d2542f;
        margin-left:6px;font-weight:700}
   .hint{color:var(--muted);font-size:12px}
@@ -181,14 +194,24 @@
         <div class="prog"><i id="progBar"></i></div>
         <span id="progTxt" class="hint">0/0</span>
       </div>
+      <div class="review-pane">
+        <h3>审核：对 / 错判断</h3>
+        <div class="rv-stat">已审 <b id="rvDone">0</b>/<b id="rvTotal">0</b>（<b id="rvPct">0%</b>）· 错 <b id="rvBad" class="bad">0</b></div>
+        <div class="rv-btns">
+          <button class="ghost" id="rvBadOnly" type="button">只看错的</button>
+          <button class="ghost" id="rvAllOk" type="button">全标正确</button>
+          <button class="ghost" id="rvClear" type="button">清除审核</button>
+        </div>
+        <div class="hint">用法：先点「全标正确」（信任已填数据），再对错的格点 ✗ 挑出来改；改完用 ✓/✗ 重判。点左侧音标即可插入，无需手打。</div>
+      </div>
     </aside>
     <div class="table-pane">
 
   <div class="sec active" id="sec-sheng">
-    <div class="scroll"><table id="tblSheng"><thead><tr><th style="width:130px">中古声母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言声母（IPA）</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll"><table id="tblSheng"><thead><tr><th style="width:130px">中古声母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言声母（IPA）</th><th style="width:60px">状态</th><th style="width:90px">审核</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="sec" id="sec-yun">
-    <div class="scroll"><table id="tblYun"><thead><tr><th style="width:130px">中古韵母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言韵母（IPA）</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll"><table id="tblYun"><thead><tr><th style="width:130px">中古韵母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言韵母（IPA）</th><th style="width:60px">状态</th><th style="width:90px">审核</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="sec" id="sec-diao">
     <div class="card" style="margin-bottom:12px">
@@ -362,6 +385,9 @@ entries.forEach(function(e){
 
 /* state maps: 中古类别 -> IPA */
 var shengMap={}, yunMap={}, diaoMap={};
+/* 审核状态：中古类别 -> "ok"(已判正确) / "bad"(判为错误待改)；声母/韵母各一份，按表分别存 */
+var shengReview={}, yunReview={};
+var rvOnlyBad=false;   // 审核过滤：只看错的
 /* 声调模型 v2：以“方言实际调类”为核心。
    dialectTones = 方言调类清单 [{id,name,value}]（如 [{阴平,55},{阳平,21},...]）
    diaoToTone   = 中古调类(d|qz) -> 方言调类 id（哪些中古类归哪个方言调）
@@ -422,6 +448,7 @@ function buildTable(tblId, mapObj, keyFn, valFn, store, ph){
   keys.forEach(function(k){
     var ex=exampleOf(mapObj[k]);
     var tr=document.createElement("tr");
+    tr.dataset.k=k;
     var td1=document.createElement("td"); td1.className="tg"; td1.textContent=keyFn(k);
     /* 声调表：中古"入"类自动打入声标签，提示需标促声（如 5ʔ） */
     if(store===diaoMap && k.indexOf("入")===0){
@@ -447,11 +474,33 @@ function buildTable(tblId, mapObj, keyFn, valFn, store, ph){
     inp.type="text"; inp.className="ipa"; inp.placeholder=ph; inp.dataset.k=k; inp.dataset.store=store;
     inp.value=store[k]||"";
     inp.addEventListener("focus",function(){lastFocus=inp;});
-    inp.addEventListener("input",function(){store[k]=inp.value.trim();updateProgress();autoSave();if(window.__chkT)clearTimeout(window.__chkT);window.__chkT=setTimeout(function(){infer();renderCheck();},250);});
+    inp.addEventListener("input",function(){
+      store[k]=inp.value.trim();
+      var rv=(store===shengMap)?shengReview:(store===yunMap)?yunReview:null;
+      if(rv){ delete rv[k]; tr.className=""; }
+      updateProgress(); autoSave();
+      if(window.__chkT)clearTimeout(window.__chkT);
+      window.__chkT=setTimeout(function(){infer();renderCheck();},250);
+      updateReviewUI();
+    });
     td3.appendChild(inp);
     var td4=document.createElement("td");
     td4.className="st";
     tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);tr.appendChild(td4);
+    /* 审核列：仅声母/韵母表（store 为 shengMap / yunMap）显示 ✓/✗ 判断按钮 */
+    var rvMap=(store===shengMap)?shengReview:(store===yunMap)?yunReview:null;
+    if(rvMap){
+      var td5=document.createElement("td"); td5.className="rv";
+      var bOk=document.createElement("button"); bOk.className="rvbtn ok"; bOk.type="button"; bOk.textContent="✓";
+      var bBad=document.createElement("button"); bBad.className="rvbtn bad"; bBad.type="button"; bBad.textContent="✗";
+      bOk.title="判为正确"; bBad.title="判为错误（需修改）";
+      bOk.addEventListener("click",function(){ rvMap[k]="ok"; markRow(tr,"ok"); updateReviewUI(); autoSave(); });
+      bBad.addEventListener("click",function(){ rvMap[k]="bad"; markRow(tr,"bad"); updateReviewUI(); autoSave(); });
+      td5.appendChild(bOk); td5.appendChild(bBad);
+      tr.appendChild(td5);
+      if(rvMap[k]==="ok") tr.className="rv-ok";
+      else if(rvMap[k]==="bad") tr.className="rv-bad";
+    }
     tb.appendChild(tr);
   });
   window.__keys=keys;
@@ -649,6 +698,34 @@ function updateProgress(){
   document.getElementById("stYun").textContent=c.ky;
   document.getElementById("stDiao").textContent=c.kd;
   document.getElementById("stFill").textContent=(c.total?Math.round(c.filled/c.total*100):0)+"%";
+  updateReviewUI();
+}
+
+/* ---------- 审核（✓/✗ 对/错判断） ---------- */
+/* 行标记：state = "ok" | "bad" | ""（未判）。该行左侧加色条，便于一眼区分 */
+function markRow(tr,state){ tr.className = state? ("rv-"+state) : ""; }
+/* 过滤：只看错的模式下，隐藏未判/已判正确的行 */
+function applyRvFilter(){
+  ["tblSheng","tblYun"].forEach(function(id){
+    var tb=document.querySelector("#"+id+" tbody"); if(!tb) return;
+    tb.querySelectorAll("tr").forEach(function(tr){
+      var k=tr.dataset.k; if(!k) return;
+      var rv=(id==="tblSheng")?shengReview:yunReview;
+      tr.style.display = (rvOnlyBad && rv[k]!=="bad") ? "none" : "";
+    });
+  });
+}
+/* 刷新审核统计（已审/总数/错）并重算过滤 */
+function updateReviewUI(){
+  var ks=Object.keys(bySheng), ky=Object.keys(byYun);
+  var total=ks.length+ky.length, done=0, bad=0;
+  ks.forEach(function(k){ if(shengReview[k]){done++; if(shengReview[k]==="bad")bad++;} });
+  ky.forEach(function(k){ if(yunReview[k]){done++; if(yunReview[k]==="bad")bad++;} });
+  var dOk=document.getElementById("rvDone"), dTot=document.getElementById("rvTotal"), dBad=document.getElementById("rvBad");
+  if(dOk)dOk.textContent=done; if(dTot)dTot.textContent=total; if(dBad)dBad.textContent=bad;
+  var pct=document.getElementById("rvPct"); if(pct)pct.textContent=(total?Math.round(done/total*100):0)+"%";
+  var btn=document.getElementById("rvBadOnly"); if(btn)btn.classList.toggle("active",rvOnlyBad);
+  applyRvFilter();
 }
 
 /* ---------- infer ---------- */
@@ -1100,7 +1177,8 @@ function autoSave(){
     try{
       var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,
               wordOverride:wordOverride,verifyData:verifyData,savedAt:Date.now(),ver:DRAFT_VERSION,
-              dialectTones:dialectTones,diaoToTone:diaoToTone};
+              dialectTones:dialectTones,diaoToTone:diaoToTone,
+              shengReview:shengReview,yunReview:yunReview};
       localStorage.setItem(SAVE_KEY,JSON.stringify(d));
       setSaveStatus(d.savedAt);
     }catch(e){ /* localStorage 不可用（如隐私模式）则静默降级 */ }
@@ -1109,7 +1187,8 @@ function autoSave(){
 /* ---------- draft ---------- */
 document.getElementById("btnSave").addEventListener("click",function(){
   var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,savedAt:Date.now(),ver:DRAFT_VERSION,
-        dialectTones:dialectTones,diaoToTone:diaoToTone};
+        dialectTones:dialectTones,diaoToTone:diaoToTone,
+        shengReview:shengReview,yunReview:yunReview};
   d.wordOverride=wordOverride; d.verifyData=verifyData;
   localStorage.setItem(SAVE_KEY,JSON.stringify(d));
   download("方言草稿.json",JSON.stringify(d,null,2),"application/json");
@@ -1126,12 +1205,14 @@ function applyDraft(d){
   if(!d.ver || d.ver < DRAFT_VERSION){
     toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
     shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
+    shengReview={}; yunReview={};
     wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
     defaultTones(); syncDiaoMap();
     rebuildAll(); infer(); renderCheck();
     return;
   }
   shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{};
+  shengReview=d.shengReview||{}; yunReview=d.yunReview||{};
   liZiStore=d.liZi||{};
   wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
   /* 声调模型 v2：优先用新格式 dialectTones+diaoToTone；旧草稿只有扁平 diaoMap 时，
@@ -1166,6 +1247,7 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
     try{
       MODEL=JSON.parse(rd.result); entries=MODEL.entries||[];
       bySheng={};byYun={};byDiao={};shengMap={};yunMap={};diaoMap={};
+      shengReview={}; yunReview={};
       entries.forEach(function(e){
         var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG);
         var sk=shengKey(s,d,qz,deng),yk=yunKey(y,hu,deng),dk=diaoKey(s,d,qz);
@@ -1188,6 +1270,7 @@ document.getElementById("draftFileIn").addEventListener("change",function(ev){
       /* 只灌 声母 + 韵母；例字/逐字覆盖/抽样/声调 一律不动，保留当前威县 4 调配置 */
       shengMap=d.shengMap||{};
       yunMap=d.yunMap||{};
+      shengReview={}; yunReview={};
       rebuildAll(); infer(); renderCheck(); updateProgress();
       autoSave();
       toast("已导入草稿的声母("+Object.keys(shengMap).length+"类)与韵母("+Object.keys(yunMap).length+"类)，声调保持原配置未改动");
@@ -1208,6 +1291,24 @@ function buildAll(){
 }
 buildAll();
 renderPalette("sheng");   /* 初始显示声母（辅音）面板 */
+
+/* ---------- 审核按钮 ---------- */
+document.getElementById("rvBadOnly").addEventListener("click",function(){
+  rvOnlyBad=!rvOnlyBad; applyRvFilter();
+  this.classList.toggle("active",rvOnlyBad);
+});
+document.getElementById("rvAllOk").addEventListener("click",function(){
+  Object.keys(bySheng).forEach(function(k){ if(shengMap[k]) shengReview[k]="ok"; });
+  Object.keys(byYun).forEach(function(k){ if(yunMap[k]) yunReview[k]="ok"; });
+  rebuildAll(); updateReviewUI(); autoSave();
+  toast("已把已填的声母/韵母全部标为正确；请对错的格点 ✗ 挑出修改");
+});
+document.getElementById("rvClear").addEventListener("click",function(){
+  shengReview={}; yunReview={}; rvOnlyBad=false;
+  rebuildAll(); updateReviewUI(); autoSave();
+  toast("已清除全部审核标记");
+});
+updateReviewUI();
 
 /* ---------- 抽样校验 / 全字审核 事件绑定 ---------- */
 document.getElementById("btnVGen").addEventListener("click",genVerifySample);
