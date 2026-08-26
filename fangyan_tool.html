@@ -142,6 +142,8 @@
     <button class="ghost" id="btnSave">保存草稿（含下载文件）</button>
     <button class="ghost" id="btnLoadDraft">读取草稿</button>
     <label class="ghost" style="padding:9px 16px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--accent);font-weight:600;cursor:pointer">
+      导入草稿文件（仅声韵）<input id="draftFileIn" type="file" accept=".json" style="display:none"/></label>
+    <label class="ghost" style="padding:9px 16px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--accent);font-weight:600;cursor:pointer">
       载入我的 index.json<input id="fileIn" type="file" accept=".json" style="display:none"/></label>
   </div>
 
@@ -1172,6 +1174,25 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
       });
       buildAll(); toast("已载入你的 index.json（"+entries.length+" 字）");
     }catch(err){ toast("解析失败："+err.message); }
+  };
+  rd.readAsText(f);
+});
+
+/* ---------- 导入草稿文件（仅声母+韵母，保留当前方言声调配置） ---------- */
+document.getElementById("draftFileIn").addEventListener("change",function(ev){
+  var f=ev.target.files[0]; if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var d=JSON.parse(rd.result);
+      /* 只灌 声母 + 韵母；例字/逐字覆盖/抽样/声调 一律不动，保留当前威县 4 调配置 */
+      shengMap=d.shengMap||{};
+      yunMap=d.yunMap||{};
+      rebuildAll(); infer(); renderCheck(); updateProgress();
+      autoSave();
+      toast("已导入草稿的声母("+Object.keys(shengMap).length+"类)与韵母("+Object.keys(yunMap).length+"类)，声调保持原配置未改动");
+    }catch(err){ toast("导入失败："+err.message); }
+    ev.target.value="";
   };
   rd.readAsText(f);
 });
