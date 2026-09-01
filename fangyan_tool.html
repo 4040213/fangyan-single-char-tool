@@ -453,6 +453,18 @@ function diaoKey(s,d,qz){
   return d+"|"+qz;
 }
 var bySheng={}, byYun={}, byDiao={};
+
+/* 用内置标准字表（MODEL.entries）构建声/韵/调类清单，使工具在“未载入用户 index.json”时
+   三张表也能正常显示类清单，用户仅“导入草稿”即可完整工作（草稿只含音值映射、不含字表本身） */
+function buildIndex(){
+  bySheng={};byYun={};byDiao={};
+  entries.forEach(function(e){
+    var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG),she=dec(e.SHE);
+    var sk=shengKey(s,d,qz,deng,hu,she,y),yk=yunKey(y,hu,deng),dk=diaoKey(s,d,qz);
+    (bySheng[sk]=bySheng[sk]||[]).push(e);(byYun[yk]=byYun[yk]||[]).push(e);
+    (byDiao[dk]=byDiao[dk]||[]).push(e);
+  });
+}
 entries.forEach(function(e){
   var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG), she=dec(e.SHE);
   var sk=shengKey(s,d,qz,deng,hu,she,y), yk=yunKey(y,hu,deng), dk=diaoKey(s,d,qz);
@@ -1916,6 +1928,7 @@ document.getElementById("btnLoadDraft").addEventListener("click",function(){
   applyDraft(JSON.parse(raw)); infer(); renderPreview(); renderSystem(); updateProgress(); toast("已读取本地草稿");
 });
 function applyDraft(d){
+  if(Object.keys(bySheng).length===0 && entries.length) buildIndex();  // 兜底：类清单为空（未载入字表）时用内置标准字表
   /* 旧版本草稿（声韵分组键已变）迁移：清空声韵表填写，保留逐字修改历史与抽样数据 */
   if(!d.ver || d.ver < DRAFT_VERSION){
     toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
@@ -2004,6 +2017,7 @@ function buildAll(){
   updateProgress();
   renderCheck();
 }
+if(entries.length) buildIndex();   // 启动时用内置标准字表初始化类清单，无需先载入 index.json
 buildAll();
 renderPalette("sheng");   /* 初始显示声母（辅音）面板 */
 
