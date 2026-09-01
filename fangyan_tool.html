@@ -145,6 +145,8 @@
   .vsub.none{background:#f2f3f7;color:#99a0b0;border:1px solid #e2e5ee;}
   tr.vrow-done>td{background:#f4fcf7;}
   tr.vrow-dirty>td{background:#fff9f0;}
+  tr.vrow-new>td{background:#f3f0ff;}
+  .vnew{display:inline-block;font-size:10px;line-height:1.4;padding:1px 5px;margin-left:4px;border-radius:5px;background:#ece6ff;color:#5a3ec8;border:1px solid #c9bdf6;font-weight:700;vertical-align:middle;}
   td.vcell-td{background:inherit;}
   .v-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle;}
   .v-dot.done{background:#1e7a3c;}
@@ -183,6 +185,7 @@
 </head>
 <body>
 <div id="errBox" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#b00020;color:#fff;padding:10px 16px;font:13px/1.5 monospace;white-space:pre-wrap;max-height:45vh;overflow:auto;box-shadow:0 2px 10px rgba(0,0,0,.4)"></div>
+<div id="blockBox" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99998;background:#a35b00;color:#fff;padding:10px 16px;font:13px/1.5 monospace;white-space:pre-wrap;max-height:45vh;overflow:auto;box-shadow:0 2px 10px rgba(0,0,0,.4)"></div>
 <header>
   <h1>方言单字声韵调自动填写工具</h1>
   <p>基于《方言调查字表》"三表法"：声母表按中古声母分组、韵母表按中古韵母分组；声调表先定义你方言的实际调类（如 阴平/阳平/上声/去声），再把中古各类映射到对应调，自动拼合为每字完整声韵调。</p>
@@ -552,6 +555,14 @@ function showError(msg){
 window.addEventListener("error",function(e){
   showError((e.error&&e.error.stack)||e.message||String(e));
 });
+/* 用户操作类提示（非程序错误）：例如「提交被阻止，请补全校对」，用琥珀色条，不带“运行错误”帽子 */
+function showBlock(msg){
+  var b=document.getElementById("blockBox");
+  if(!b) return;
+  b.textContent="⚠ 提交被阻止：\n"+msg;
+  b.style.display="block";
+  b.onclick=function(){ b.style.display="none"; };
+}
 
 var liZiStore={};   // 用户手动指定的例字（覆盖自动首字），键=中古类别
 
@@ -560,7 +571,7 @@ var liZiStore={};   // 用户手动指定的例字（覆盖自动首字），键
 var wordOverride={};
 /* 抽样校验数据：{size:样本量, sample:[{chr,ms,my,md,fs,fy,fd,rs,ry,rd}]}
    rs/ry/rd=用户填写的真实声/韵/调，空串表示未填 */
-var verifyData={size:80, sample:[]};
+var verifyData={size:80, sample:[], safe:[]};   // safe = 已校对并提交、移入「安全区」的字（chrHex 列表），下次抽样不再出现
 /* 抽样校验的三个字段（真实声/韵/调），提交与标识逻辑统一遍历它 */
 var VER_FIELDS=["rs","ry","rd"];
 var VER_FMAP={rs:"s", ry:"y", rd:"d"};   // 映射到 wordOverride 的字段名
@@ -1106,39 +1117,42 @@ function renderCheck(){
 }
 
 /* ================= 抽样校验 ================= */
+/* 安全区：已校对并提交的字，下次抽样不再出现 */
+function isSafe(chrHex){ return (verifyData.safe||[]).indexOf(chrHex)>=0; }
+function addSafe(chrHex){ var s=verifyData.safe||(verifyData.safe=[]); if(s.indexOf(chrHex)<0) s.push(chrHex); }
+function safeCount(){ return (verifyData.safe||[]).length; }
 function genVerifySample(){
-  var size=parseInt(document.getElementById("vSize").value)||80;
-  verifyData.size=size;
+  var addN=parseInt(document.getElementById("vSize").value)||80;
   var rows=window.__rows||infer();
-  // 按 (声,韵,调) 三元组分层
+  var sample=verifyData.sample||[];
+  var existing={};
+  sample.forEach(function(s){ existing[s.chr]=true; });
+  // 尚未抽样、且不在安全区的字，按 (声,韵,调) 三元组分层
   var layers={};
   rows.forEach(function(r){
+    if(existing[r.chrHex] || isSafe(r.chrHex)) return;
     var k=r.ms+"|"+r.my+"|"+r.md;
     (layers[k]=layers[k]||[]).push(r);
   });
   var keys=Object.keys(layers);
-  // 每层先抽 1 个（保证覆盖），再随机补足
   var picked=[];
-  keys.forEach(function(k){ picked.push(layers[k][Math.floor(Math.random()*layers[k].length)]); });
-  // 若层数比 size 多，则随机截断；否则从剩余随机补
+  keys.forEach(function(k){ picked.push(layers[k][Math.floor(Math.random()*layers[k].length)]); }); // 每层先抽 1 个保证覆盖
   var pool=[];
-  rows.forEach(function(r){ if(picked.indexOf(r)<0) pool.push(r); });
-  // 打乱 pool
+  keys.forEach(function(k){ layers[k].forEach(function(r){ if(picked.indexOf(r)<0) pool.push(r); }); });
   for(var i=pool.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=pool[i];pool[i]=pool[j];pool[j]=t;}
-  if(picked.length>size){ picked=picked.slice(0,size); }
-  else { picked=picked.concat(pool.slice(0,size-picked.length)); }
-  // 构建样本(保留已有真实音)
-  var oldMap={};
-  (verifyData.sample||[]).forEach(function(s){ oldMap[s.chr]=s; });
-  verifyData.sample=picked.map(function(r){
-    var prev=oldMap[r.chrHex]||{};
+  var need=Math.max(0, addN - picked.length);
+  picked=picked.concat(pool.slice(0,need));
+  // 新追加的行：真实音/状态均为空，标记 isNew（新·待判定）
+  var added=picked.map(function(r){
     return {chr:r.chrHex, ch:r.chr, ms:r.ms, my:r.my, md:r.md,
             fs:r.fs, fy:r.fy, fd:r.fd,
-            rs:prev.rs||"", ry:prev.ry||"", rd:prev.rd||"",
-            rsState:prev.rsState||"", ryState:prev.ryState||"", rdState:prev.rdState||""};
+            rs:"", ry:"", rd:"", rsState:"", ryState:"", rdState:"",
+            rsSub:undefined, rySub:undefined, rdSub:undefined, isNew:true};
   });
+  verifyData.sample=sample.concat(added);
   renderVerifyTable();
-  toast("已生成 "+verifyData.sample.length+" 字抽样表");
+  if(added.length){ toast("已追加 "+added.length+" 个新抽样字（共 "+verifyData.sample.length+" 字，安全区累计 "+safeCount()+" 字）；新字标「新·待判定」，三项校对完整后提交即移入安全区"); }
+  else { toast("没有更多可抽样的字了（全部 "+rows.length+" 字已在安全区或已抽样）"); }
 }
 
 /* ===== 提交状态标识 =====
@@ -1186,7 +1200,10 @@ function renderVerifyTable(){
        +'<th>推演声</th><th>推演韵</th><th>推演调</th><th>真实声</th><th>真实韵</th><th>真实调</th></tr></thead><tbody>';
   verifyData.sample.forEach(function(s,idx){
     var rs=rowSubState(s);
-    h+='<tr class="'+(rs?("vrow-"+rs):"")+'" data-row="'+idx+'"><td>'+s.ch+'</td><td>'+s.ms+'</td><td>'+s.my+'</td><td>'+s.md+'</td>'
+    var cls=[];
+    if(rs) cls.push("vrow-"+rs);
+    if(s.isNew) cls.push("vrow-new");
+    h+='<tr class="'+cls.join(" ")+'" data-row="'+idx+'"><td>'+s.ch+(s.isNew?'<span class="vnew">新</span>':'')+'</td><td>'+s.ms+'</td><td>'+s.my+'</td><td>'+s.md+'</td>'
       +'<td>'+s.fs+'</td><td>'+s.fy+'</td><td>'+s.fd+'</td>'
       +'<td>'+vCell(s,idx,"rs",s.fs)+'</td>'
       +'<td>'+vCell(s,idx,"ry",s.fy)+'</td>'
@@ -1210,8 +1227,8 @@ function renderVerifyTable(){
     b.addEventListener("click",function(){
       var i=+b.dataset.i, f=b.dataset.f, act=b.dataset.act, s=verifyData.sample[i];
       var inf = f==="rs"?s.fs : f==="ry"?s.fy : s.fd;
-      if(act==="ok"){ s[f+"State"]="ok"; s[f]=inf; hideIpaPop(); }   // 判定一致：真实=推演，收起面板
-      else { s[f+"State"]="bad"; if(s[f]===inf) s[f]=""; }            // 判定不一致：清空待填正确音
+      if(act==="ok"){ s[f+"State"]="ok"; s[f]=inf; hideIpaPop(); s.isNew=false; }   // 判定一致：真实=推演，收起面板；触碰后取消「新」标记
+      else { s[f+"State"]="bad"; if(s[f]===inf) s[f]=""; s.isNew=false; }            // 判定不一致：清空待填正确音；触碰后取消「新」标记
       renderVerifyTable(); autoSave();
       if(act==="bad"){
         var ni=document.querySelector('#vTableWrap input.vin[data-i="'+i+'"][data-f="'+f+'"]');
@@ -1236,7 +1253,7 @@ function renderSubmitBar(){
   var bar=document.getElementById("vSubmitBar");
   if(!bar) return;
   var sample=verifyData.sample||[];
-  if(!sample.length){ bar.innerHTML=""; return; }
+  if(!sample.length){ bar.innerHTML='<span class="hint">抽样表为空。安全区已累计 <b>'+safeCount()+'</b> 字（已校对并提交，不再抽样）。点「生成抽样表」抽取下一批新字。</span>'; return; }
   var done=0,dirty=0,pending=0,judged=0,badNoVal=0;
   sample.forEach(function(s){
     VER_FIELDS.forEach(function(f){
@@ -1283,43 +1300,65 @@ function clearVerifyOverride(chrHex, field, restoreVal){
 /* 提交校验结果：把校对结论真正生效（写入逐字覆盖），并快照以便后续识别「改过没提交」 */
 function submitVerify(){
   var sample=verifyData.sample||[];
-  if(!sample.length){ showError("没有抽样数据可提交，请先点「生成抽样表」"); return; }
-  var nFix=0, nOk=0, nSkip=0, nClear=0;
+  if(!sample.length){ showBlock("没有抽样数据可提交，请先点「生成抽样表」"); return; }
+  /* —— 提交前置校验：每项都必须判定，且 ✗ 必须填正确音，否则阻止并明确提醒 —— */
+  var fmap={rs:"声",ry:"韵",rd:"调"};
+  var incomplete=[];
+  sample.forEach(function(s){
+    var miss=[];
+    VER_FIELDS.forEach(function(f){
+      var st=s[f+"State"]||"";
+      if(st==="") miss.push({f:f, type:"unjudged"});                 // 未判定
+      else if(st==="bad" && !(s[f]||"").trim()) miss.push({f:f, type:"novalue"}); // ✗ 未填音
+    });
+    if(miss.length) incomplete.push({ch:s.ch, miss:miss});
+  });
+  if(incomplete.length){
+    var novalue=incomplete.filter(function(x){return x.miss.some(function(m){return m.type==="novalue";});});
+    var unjudged=incomplete.filter(function(x){return x.miss.some(function(m){return m.type==="unjudged";});});
+    var msg="提交被阻止：有 "+incomplete.length+" 个字尚未校对完整，不能提交。";
+    if(novalue.length){
+      msg+="\n• "+novalue.length+" 个字标了✗但没填正确音："
+        +novalue.slice(0,10).map(function(x){
+            return x.ch+"("+x.miss.filter(function(m){return m.type==="novalue";}).map(function(m){return fmap[m.f];}).join("/")+"缺)";
+          }).join("、")+(novalue.length>10?"…":"");
+    }
+    if(unjudged.length){
+      msg+="\n• "+unjudged.length+" 个字有未判定项："
+        +unjudged.slice(0,10).map(function(x){
+            return x.ch+"("+x.miss.filter(function(m){return m.type==="unjudged";}).map(function(m){return fmap[m.f];}).join("/")+"未判)";
+          }).join("、")+(unjudged.length>10?"…":"");
+    }
+    msg+="\n请把以上字的 声/韵/调 全部判定（✓一致，或✗并填正确音）后再提交。";
+    showBlock(msg);
+    return;
+  }
+  /* —— 全部完整：生效并移入安全区 —— */
+  var nFix=0, nOk=0, nClear=0;
   sample.forEach(function(s){
     VER_FIELDS.forEach(function(f){
-      if(!s[f+"State"]) return;                       // 未判定：不碰
       var val=(s[f]||"").trim();
       if(s[f+"State"]==="ok"){
-        /* 判定一致 → 以推演值为准；若以前误存过覆盖，清掉它 */
         var inf = f==="rs"?s.fs : f==="ry"?s.fy : s.fd;
         if(clearVerifyOverride(s.chr, VER_FMAP[f], inf)) nClear++;
         s[f+"Sub"]=inf; nOk++;
-        return;
+      }else{
+        saveWordOverride(s.chr, VER_FMAP[f], val, "verify");
+        s[f+"Sub"]=val; nFix++;
       }
-      /* 判定不一致 → 必须有正确音才生效；没填就跳过，绝不清除已有校对 */
-      if(!val){ nSkip++; return; }
-      saveWordOverride(s.chr, VER_FMAP[f], val, "verify");
-      s[f+"Sub"]=val; nFix++;
     });
+    addSafe(s.chr);            // 三项都已判定 → 移入安全区（下次抽样不再出现）
   });
-  if(!nFix && !nOk && !nClear && !nSkip){ showError("还没有任何判定，先点 ✓ 或 ✗"); return; }
   verifyData.submittedAt=Date.now();
-  /* 让修正立刻作用于全表：重算预览 / 语音系统 / 审核表 / 进度 */
-  try{ infer(); renderPreview(); renderSystem(); renderCheck(); updateProgress(); renderAudit(); }catch(e){ /* 渲染异常不影响数据已落地 */ }
+  try{ infer(); renderPreview(); renderSystem(); renderCheck(); updateProgress(); renderAudit(); }catch(e){}
+  /* 已进安全区的字从当前抽样表移除（不再占用校对视图）；提交前已全部完整，此处即整批移出 */
+  verifyData.sample=sample.filter(function(s){ return !isSafe(s.chr); });
   renderVerifyTable();
-  autoSave();
-  /* 同时落一份草稿文件，防止浏览器缓存丢失（校对来之不易） */
-  try{
-    var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,userSplits:userSplits,
-           savedAt:Date.now(),ver:DRAFT_VERSION,dialectTones:dialectTones,diaoToTone:diaoToTone,
-           wordOverride:wordOverride,verifyData:verifyData};
-    localStorage.setItem(SAVE_KEY,JSON.stringify(d));
-    download("方言草稿.json",JSON.stringify(d,null,2),"application/json");
-  }catch(e){}
-  var msg="已提交：修正 "+nFix+" 处、确认一致 "+nOk+" 处";
+  autoSave();                  // 仅自动保存（localStorage）；需导出用「导出校验表」
+  var bb=document.getElementById("blockBox"); if(bb) bb.style.display="none";   // 成功则收起可能的旧提示
+  var msg="已提交并自动保存：修正 "+nFix+" 处、确认一致 "+nOk+" 处";
   if(nClear) msg+="、撤销旧覆盖 "+nClear+" 处";
-  if(nSkip) msg+="（"+nSkip+" 处标✗未填音，已跳过保留）";
-  msg+="；改动已作用于全表，并已下载草稿备份。继续修改后可再次提交。";
+  msg+="。这些字已移入安全区（累计 "+safeCount()+" 字），下次抽样不再出现。改动已作用于全表。";
   toast(msg);
 }
 
@@ -2118,14 +2157,14 @@ function applyDraft(d){
   if(!d.ver || d.ver < DRAFT_VERSION){
     toast("表结构已升级（声母全浊分平仄+等呼细分、韵母按开合+等）：声韵表需按新分组重新填写，逐字修改历史已保留");
     shengMap={}; yunMap={}; diaoMap={}; liZiStore=d.liZi||{};
-    wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
+    wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[],safe:[]}; if(!verifyData.safe) verifyData.safe=[];
     defaultTones(); syncDiaoMap();
     rebuildAll(); infer(); renderCheck();
     return;
   }
   shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{}; userSplits=d.userSplits||{sheng:{},yun:{}};
   liZiStore=d.liZi||{};
-  wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
+  wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[],safe:[]}; if(!verifyData.safe) verifyData.safe=[];
   /* 声调模型 v2：优先用新格式 dialectTones+diaoToTone；旧草稿只有扁平 diaoMap 时，
      按“每个中古类建一个调类”重建，保证已有调值不丢 */
   if(d.dialectTones && d.dialectTones.length){
