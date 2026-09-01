@@ -147,6 +147,12 @@
   tr.vrow-dirty>td{background:#fff9f0;}
   tr.vrow-new>td{background:#f3f0ff;}
   .vnew{display:inline-block;font-size:10px;line-height:1.4;padding:1px 5px;margin-left:4px;border-radius:5px;background:#ece6ff;color:#5a3ec8;border:1px solid #c9bdf6;font-weight:700;vertical-align:middle;}
+  .v-safe-wrap{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fbfcfe;}
+  .v-safe-wrap h4{margin:2px 0 4px;font-size:14px;}
+  .v-safe-wrap table.safe{margin-top:8px;}
+  .v-safe-wrap table.safe th{background:#f1f3f9;}
+  .v-safe-wrap .btn.tiny{padding:2px 10px;font-size:12px;border-radius:6px;}
+  .v-safe-wrap .safe-count{font-weight:700;color:var(--accent);}
   td.vcell-td{background:inherit;}
   .v-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle;}
   .v-dot.done{background:#1e7a3c;}
@@ -323,10 +329,12 @@
         <button id="btnVClearJ" class="btn ghost">清空判定</button>
         <button id="btnVSubmit" class="btn primary">提交校验结果</button>
         <button id="btnVExp" class="btn ghost">导出校验表</button>
+        <button id="btnVSafe" class="btn ghost">已验证字 <span id="safeN">0</span> ▾</button>
       </div>
       <div id="vResult" class="v-result"></div>
       <div id="vSubmitBar" class="v-submit-bar"></div>
       <div id="vTableWrap" class="v-table-wrap"></div>
+      <div id="vSafeWrap" class="v-safe-wrap" style="display:none"></div>
     </div>
   </div>
 
@@ -1118,8 +1126,18 @@ function renderCheck(){
 
 /* ================= 抽样校验 ================= */
 /* 安全区：已校对并提交的字，下次抽样不再出现 */
-function isSafe(chrHex){ return (verifyData.safe||[]).indexOf(chrHex)>=0; }
-function addSafe(chrHex){ var s=verifyData.safe||(verifyData.safe=[]); if(s.indexOf(chrHex)<0) s.push(chrHex); }
+/* safe 兼容两种形态：旧版存字符串(chrHex)，新版存对象(含中古信息与已校音) */
+function safeList(){
+  return (verifyData.safe||[]).map(function(x){ return (typeof x==="string") ? {chr:x} : x; });
+}
+function isSafe(chrHex){ return safeList().some(function(x){return x.chr===chrHex;}); }
+function addSafe(s){
+  var safe=verifyData.safe||(verifyData.safe=[]);
+  if(safeList().some(function(x){return x.chr===s.chr;})) return;   // 去重
+  safe.push({chr:s.chr, ch:s.ch, rs:s.rs||"", ry:s.ry||"", rd:s.rd||"",
+             rsState:s.rsState||"", ryState:s.ryState||"", rdState:s.rdState||"",
+             rsSub:s.rsSub, rySub:s.rySub, rdSub:s.rdSub});
+}
 function safeCount(){ return (verifyData.safe||[]).length; }
 function genVerifySample(){
   var addN=parseInt(document.getElementById("vSize").value)||80;
@@ -1284,6 +1302,7 @@ function renderSubmitBar(){
   bar.innerHTML=html;
   var b2=document.getElementById("btnVSubmit2");
   if(b2) b2.addEventListener("click",submitVerify);
+  var sn=document.getElementById("safeN"); if(sn) sn.textContent=safeCount();   // 同步「已验证字 N」
 }
 
 /* 清掉某个字段的逐字覆盖（判定为 ✓ 时用：恢复成推演值，并留一条历史可回溯） */
@@ -1347,14 +1366,15 @@ function submitVerify(){
         s[f+"Sub"]=val; nFix++;
       }
     });
-    addSafe(s.chr);            // 三项都已判定 → 移入安全区（下次抽样不再出现）
+    addSafe(s);                // 三项都已判定 → 移入安全区（下次抽样不再出现），存完整已校记录
   });
   verifyData.submittedAt=Date.now();
   try{ infer(); renderPreview(); renderSystem(); renderCheck(); updateProgress(); renderAudit(); }catch(e){}
   /* 已进安全区的字从当前抽样表移除（不再占用校对视图）；提交前已全部完整，此处即整批移出 */
   verifyData.sample=sample.filter(function(s){ return !isSafe(s.chr); });
   renderVerifyTable();
-  autoSave();                  // 仅自动保存（localStorage）；需导出用「导出校验表」
+  renderSafeList();            // 刷新安全区列表（含本次新进的字）
+  autoSave();                  // 仅自动保存（localStorage）；需导出用「导出校验表」或「保存草稿」
   var bb=document.getElementById("blockBox"); if(bb) bb.style.display="none";   // 成功则收起可能的旧提示
   var msg="已提交并自动保存：修正 "+nFix+" 处、确认一致 "+nOk+" 处";
   if(nClear) msg+="、撤销旧覆盖 "+nClear+" 处";
@@ -2246,6 +2266,7 @@ function buildAll(){
 if(entries.length) buildIndex();   // 启动时用内置标准字表初始化类清单，无需先载入 index.json
 buildAll();
 renderPalette("sheng");   /* 初始显示声母（辅音）面板 */
+renderSubmitBar();        // 启动时同步「已验证字 N」计数（安全区）
 
 /* ---------- 抽样校验 / 全字审核 事件绑定 ---------- */
 document.getElementById("btnVGen").addEventListener("click",genVerifySample);
@@ -2272,6 +2293,57 @@ document.getElementById("btnVExp").addEventListener("click",function(){
   });
   download("抽样校验表.csv", csvFrom(lines));
 });
+/* ---------- 安全区列表 / 回退 ---------- */
+document.getElementById("btnVSafe").addEventListener("click",function(){
+  var wrap=document.getElementById("vSafeWrap");
+  if(!wrap) return;
+  if(wrap.style.display==="none"){ wrap.style.display="block"; renderSafeList(); }
+  else { wrap.style.display="none"; }
+});
+function renderSafeList(){
+  var wrap=document.getElementById("vSafeWrap");
+  if(!wrap || wrap.style.display==="none") return;
+  var list=safeList();
+  if(!list.length){
+    wrap.innerHTML='<h4>安全区（已验证字）</h4><p class="hint">暂无字。在抽样校验表逐字判定 ✓/✗ 并提交后，已校对完整的字会自动进入这里，下次抽样不再出现。点上方「生成抽样表」抽下一批新字。</p>';
+    return;
+  }
+  var h='<h4>安全区（已验证字 · 共 <span class="safe-count">'+list.length+'</span> 字）</h4>'
+       +'<p class="hint">这些字已校对并提交，下次抽样不再出现。点「移回重校」可把它拉回上方校验表重新查看/修改（原修正保留，改完再提交即可）。</p>'
+       +'<table class="grid safe"><thead><tr><th>字</th><th>中古声</th><th>中古韵</th><th>中古调</th><th>已校声</th><th>已校韵</th><th>已校调</th><th>操作</th></tr></thead><tbody>';
+  list.forEach(function(x){
+    var row=(window.__rows||infer()).filter(function(r){return r.chrHex===x.chr;})[0];
+    h+='<tr><td>'+(x.ch||'?')+'</td>'
+      + (row ? ('<td>'+row.ms+'</td><td>'+row.my+'</td><td>'+row.md+'</td>')
+             : '<td colspan="3" class="empty">—</td>')
+      + '<td>'+escH(x.rs||"—")+'</td><td>'+escH(x.ry||"—")+'</td><td>'+escH(x.rd||"—")+'</td>'
+      + '<td><button class="btn tiny" data-revert="'+escH(x.chr)+'">移回重校</button></td></tr>';
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+  wrap.querySelectorAll("button[data-revert]").forEach(function(b){
+    b.addEventListener("click",function(){ revertSafe(b.getAttribute("data-revert")); });
+  });
+}
+function revertSafe(chrHex){
+  var safe=verifyData.safe||[];
+  var idx=-1;
+  for(var i=0;i<safe.length;i++){ var c=(typeof safe[i]==="string")?safe[i]:safe[i].chr; if(c===chrHex){ idx=i; break; } }
+  if(idx<0) return;
+  var entry=(typeof safe[idx]==="string")?{chr:safe[idx]}:safe[idx];
+  safe.splice(idx,1);
+  var row=(window.__rows||infer()).filter(function(r){return r.chrHex===chrHex;})[0];
+  if(row && !(verifyData.sample||[]).some(function(s){return s.chr===chrHex;})){
+    verifyData.sample=verifyData.sample||[];
+    verifyData.sample.push({chr:row.chrHex, ch:row.chr, ms:row.ms, my:row.my, md:row.md,
+      fs:row.fs, fy:row.fy, fd:row.fd,
+      rs:entry.rs||"", ry:entry.ry||"", rd:entry.rd||"",
+      rsState:entry.rsState||"", ryState:entry.ryState||"", rdState:entry.rdState||"",
+      rsSub:entry.rsSub, rySub:entry.rySub, rdSub:entry.rdSub, isNew:false});
+  }
+  renderVerifyTable(); renderSafeList(); renderSubmitBar(); autoSave();
+  toast("已将「"+(entry.ch||chrHex)+"」移回上方校验表重校（原修正保留，可改后可再提交）。安全区剩余 "+safeCount()+" 字");
+}
 document.getElementById("aSearch").addEventListener("input",renderAudit);
 document.getElementById("aFilter").addEventListener("change",renderAudit);
 document.getElementById("btnAHist").addEventListener("click",renderHist);
