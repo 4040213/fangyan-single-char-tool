@@ -158,6 +158,7 @@
 </style>
 </head>
 <body>
+<div id="errBox" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#b00020;color:#fff;padding:10px 16px;font:13px/1.5 monospace;white-space:pre-wrap;max-height:45vh;overflow:auto;box-shadow:0 2px 10px rgba(0,0,0,.4)"></div>
 <header>
   <h1>方言单字声韵调自动填写工具</h1>
   <p>基于《方言调查字表》"三表法"：声母表按中古声母分组、韵母表按中古韵母分组；声调表先定义你方言的实际调类（如 阴平/阳平/上声/去声），再把中古各类映射到对应调，自动拼合为每字完整声韵调。</p>
@@ -514,6 +515,17 @@ defaultTones();
 /* ---------- UI helpers ---------- */
 var lastFocus=null;
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},1800);}
+/* 可见错误条：任何报错都会显式显示在页面顶部红条，便于定位（点击可关闭） */
+function showError(msg){
+  var b=document.getElementById("errBox");
+  if(!b) return;
+  b.textContent="⚠ 运行错误（请截图发我）：\n"+msg;
+  b.style.display="block";
+  b.onclick=function(){ b.style.display="none"; };
+}
+window.addEventListener("error",function(e){
+  showError((e.error&&e.error.stack)||e.message||String(e));
+});
 
 var liZiStore={};   // 用户手动指定的例字（覆盖自动首字），键=中古类别
 
@@ -883,8 +895,7 @@ function updateProgress(){
   document.querySelectorAll("#"+("sec-"+active)+" tbody tr").forEach(function(tr){
     var inp=tr.querySelector("input"); if(!inp) return;
     var st=tr.querySelector(".st");
-    st.textContent=inp.value.trim()?"✓":"";
-    st.className="st "+(inp.value.trim()?"done":"miss");
+    if(st){ st.textContent=inp.value.trim()?"✓":""; st.className="st "+(inp.value.trim()?"done":"miss"); }
   });
   // global stats
   document.getElementById("stTotal").textContent=entries.length;
@@ -2000,9 +2011,11 @@ document.getElementById("draftFileIn").addEventListener("change",function(ev){
       var d=JSON.parse(rd.result);
       /* 完整恢复：声韵调 + 拆分 + 逐字修改 + 抽样 + 方言调配置，全部从草稿灌回（草稿即完整备份） */
       applyDraft(d);
-      infer(); renderPreview(); renderSystem(); renderCheck(); updateProgress(); autoSave();
+      /* 分步容错：任一步渲染出错都不影响数据落地，并显式报告是哪一步出错 */
+      [["推断",infer],["结果预览",renderPreview],["语音系统汇总",renderSystem],["质检",renderCheck],["进度条",updateProgress],["自动保存",autoSave]]
+        .forEach(function(st){ try{ st[1](); }catch(e){ showError("「"+st[0]+"」步骤出错："+e.message+"\n"+(e.stack||"")); } });
       toast("已完整导入草稿：声母("+Object.keys(shengMap).length+")、韵母("+Object.keys(yunMap).length+")、声调("+dialectTones.length+")，拆分与逐字修改一并恢复");
-    }catch(err){ toast("导入失败："+err.message); }
+    }catch(err){ showError("导入失败："+err.message+"\n"+(err.stack||"")); toast("导入失败："+err.message); }
     ev.target.value="";
   };
   rd.readAsText(f);
