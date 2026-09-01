@@ -121,6 +121,7 @@
   table.grid th{position:sticky;top:0;background:var(--soft);padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;z-index:1;}
   table.grid td{padding:6px;border-bottom:1px solid #eef1f7;vertical-align:middle;}
   table.grid tr:hover td{background:#fafbff;}
+  table.grid td.gap{background:#f4f6fb;color:#c2c8d4;text-align:center;}
   table.grid input.vin{width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;}
   .vcell{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
   .vbtn{width:24px;height:24px;line-height:1;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:#9aa3b2;font-size:13px;font-weight:700;}
@@ -142,6 +143,18 @@
   .hist-row{border-left:3px solid var(--accent2);padding:4px 10px;margin:6px 0;background:#faf9ff;}
   .hist-row .ts{color:var(--muted);font-size:11px;}
   .hist-row .src{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--soft);color:var(--accent);margin-left:6px;}
+  /* 一致性警示 + 手动拆分 */
+  tr.warn-row>td{background:#fff7e6;}
+  .badge-warn{display:inline-block;padding:1px 6px;border-radius:6px;background:#fff0c2;color:#9a6b00;font-size:11px;font-weight:bold;white-space:nowrap;}
+  td.op{padding:4px 6px;}
+  .btn.sm{padding:3px 8px;font-size:12px;}
+  tr.split-row>td{background:#fdf6e8;border-top:none;}
+  .split-panel{padding:8px 10px;border:1px dashed #e3c982;border-radius:8px;margin:2px 0 8px;}
+  .split-title{font-size:12px;color:#9a6b00;margin-bottom:6px;font-weight:bold;}
+  .split-item{display:flex;align-items:center;gap:8px;margin:4px 0;}
+  .split-chars{font-family:var(--mono);font-size:15px;letter-spacing:1px;color:#333;flex:1;word-break:break-all;}
+  .split-item input.ipa{width:80px;}
+  .split-panel .btn{margin-top:6px;}
 </style>
 </head>
 <body>
@@ -161,7 +174,7 @@
     <button class="ghost" id="btnSave">保存草稿（含下载文件）</button>
     <button class="ghost" id="btnLoadDraft">读取草稿</button>
     <label class="ghost" style="padding:9px 16px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--accent);font-weight:600;cursor:pointer">
-      导入草稿文件（仅声韵）<input id="draftFileIn" type="file" accept=".json" style="display:none"/></label>
+      导入草稿文件（完整恢复）<input id="draftFileIn" type="file" accept=".json" style="display:none"/></label>
     <label class="ghost" style="padding:9px 16px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--accent);font-weight:600;cursor:pointer">
       载入我的 index.json<input id="fileIn" type="file" accept=".json" style="display:none"/></label>
   </div>
@@ -186,6 +199,8 @@
     <div class="tab" data-t="check">质检 · 正确率</div>
     <div class="tab" data-t="verify">抽样校验</div>
     <div class="tab" data-t="audit">全字审核</div>
+    <div class="tab" data-t="laws">音系规律</div>
+    <div class="tab" data-t="std3">标准三表</div>
   </div>
 
   <div class="io-grid" id="ioGrid">
@@ -204,10 +219,10 @@
     <div class="table-pane">
 
   <div class="sec active" id="sec-sheng">
-    <div class="scroll"><table id="tblSheng"><thead><tr><th style="width:130px">中古声母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言声母（IPA）</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll"><table id="tblSheng"><thead><tr><th style="width:130px">中古声母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言声母（IPA）</th><th style="width:50px">状态</th><th style="width:64px">操作</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="sec" id="sec-yun">
-    <div class="scroll"><table id="tblYun"><thead><tr><th style="width:130px">中古韵母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言韵母（IPA）</th><th style="width:60px">状态</th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll"><table id="tblYun"><thead><tr><th style="width:130px">中古韵母</th><th style="width:200px">例字（点击可换 / 字数）</th><th>方言韵母（IPA）</th><th style="width:50px">状态</th><th style="width:64px">操作</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="sec" id="sec-diao">
     <div class="card" style="margin-bottom:12px">
@@ -326,6 +341,51 @@
     </details>
   </div>
 
+  <div class="sec" id="sec-laws">
+    <div class="card">
+      <h3 style="margin:4px 0 8px">音系规律自检 · 配合与合流</h3>
+      <p class="hint" style="line-height:1.6;margin-bottom:10px">
+        本页从你已填的读音里"长出"规律，不依赖额外数据。六项：
+        <b>① 声母跨组合流检测</b> / <b>② 韵母跨组合流检测</b>——不同中古类若被你填成同一读音，按"跨声母系列"判定是否<b>疑似合流</b>；
+        <b>③ 声调归并表</b>——中古调类→方言调值（归并属正常）；
+        <b>④ 声韵配合矩阵</b>——横轴声母、纵轴韵母，格内为该组合在字表中的出现字数，空格即字表未现组合（可能音系空缺，也可能只是未被抽样）；
+        <b>⑤ 记音一致性</b>——揪出"同一个音被你写成两种样子"（如 ɑ/a、ʦ/ts、g/ɡ），可一键统一；
+        <b>⑥ 最小对立与互补分布</b>——判断两个音是真对立还是同一音位的条件变体，并给出<b>最小对立对</b>作为证据。
+      </p>
+      <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <label><input type="checkbox" id="lawsUseSample"/> 用内置样例音（大方）演示（不勾=用你填的读音）</label>
+        <button id="btnLaws" class="btn">重新计算</button>
+        <button id="btnLawsCsv" class="btn ghost">导出矩阵CSV</button>
+        <button id="btnLawsPhCsv" class="btn ghost">导出音位核查CSV</button>
+        <span id="lawsNote" class="hint"></span>
+      </div>
+    </div>
+    <div id="lawsMerger"></div>
+    <div id="lawsMatrix"></div>
+    <div id="lawsPhoneme"></div>
+    <div id="lawsContrast"></div>
+  </div>
+
+  <div class="sec" id="sec-std3">
+    <div class="card">
+      <h3 style="margin:4px 0 8px">方言调查字表 · 标准三表</h3>
+      <p class="hint" style="line-height:1.6;margin-bottom:10px">
+        按《方言调查字表》附录的<span style="color:#9a6b00">声母表 / 韵母表 / 声调表</span>标准格式，从你已填的读音自动生成。
+        <b>① 声母表</b>：中古声母按传统分组（唇→舌→齿→牙→喉），列出方言实际声母，含平仄 / 洪细 / 开合分化——用于定<b>声类</b>与<b>声母</b>；
+        <b>② 韵母表</b>：16 摄 × 开合 × 等，列出方言实际韵母——用于定<b>韵母</b>；
+        <b>③ 声调表</b>：中古调类 × 清浊 → 方言调类与调值。
+        三表齐全后，真正的难点就落到<b>声韵调的配合规律</b>（见「音系规律」页的合流检测 / 配合矩阵 / 最小对立）。
+      </p>
+      <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button id="btnStd3Csv" class="btn ghost">导出标准三表 CSV</button>
+        <span class="hint">（未填的格子显示"（未填）"；字表中无此母显示"—"）</span>
+      </div>
+    </div>
+    <div id="std3Sheng"></div>
+    <div id="std3Yun"></div>
+    <div id="std3Diao"></div>
+  </div>
+
 </div>
 <div class="toast" id="toast"></div>
 <div id="ipaPop"></div>
@@ -358,10 +418,23 @@ var entries = MODEL.entries || [];
 var PALATAL_SHENG=new Set(["見","溪","羣","曉","匣","精","清","從","心","邪"]);
 var QUANZHUO_SHENG=new Set(["並","定","澄","從","邪","崇","船","禪","羣","匣","奉"]);
 var CIZHUO_SHENG  =new Set(["明","泥","來","日","疑","云","以","微"]);
-function hongOrXi(deng){ return (deng==="一"||deng==="二")?"洪":"细"; }
-function shengKey(s,d,qz,deng){
+/* 零声母类：影/疑/云/以。威县特点——开口呼零声母音节前加舌根浊鼻音 ŋ，
+   合口/齐齿/撮口为零声母 ∅。故按开合(HU)拆分，让你按自己记音逐组填 ŋ/∅。 */
+var LING_SHENG=new Set(["影","疑","云","以"]);
+/* 腭化（洪细）判定：官话中 見/溪/羣/曉/匣 在细音前腭化为 tɕ 类。
+   细音环境 = 三等 / 四等，或（二等开口且属 江/假/咸/山/蟹/效 摄）。
+   其余（一等、二等合口、梗摄二等）不腭化，保持 k/ts 类。
+   此规律不依赖具体方言、也不依赖解码 PUA，适用于威县等冀鲁官话。 */
+var PALATAL_HONG_SHE=new Set(["江","假","咸","山","蟹","效"]);
+function hongOrXi(s,y,hu,deng,she){
+  if(deng==="三"||deng==="四") return "细";
+  if(deng==="二" && hu==="開" && PALATAL_HONG_SHE.has(she)) return "细";
+  return "洪";
+}
+function shengKey(s,d,qz,deng,hu,she,y){
   var base = qz==="濁" ? s+"·"+(d==="平"?"平":"仄") : s;
-  if(PALATAL_SHENG.has(s)) base = base+"·"+hongOrXi(deng);
+  if(PALATAL_SHENG.has(s)) base = base+"·"+hongOrXi(s,y,hu,deng,she);
+  if(LING_SHENG.has(s))    base = base+"·"+(hu==="開"?"開":"合");
   return base;
 }
 /* 韵母分组键：中古韵母 × 开合(HU) × 等(DENG) —— 同韵因开合/等读不同韵母（如麻: 開二=a / 開三=ia / 合二=ua） */
@@ -372,12 +445,17 @@ function diaoKey(s,d,qz){
     if(QUANZHUO_SHENG.has(s)) return "入|全浊";
     if(CIZHUO_SHENG.has(s))   return "入|次浊";
   }
+  if(d==="上" && qz==="濁"){
+    /* 官话: 全浊上归去声、次浊上保留上声，两类必须拆分；否则次浊上(老里冷两鲁了)被错判去声 */
+    if(QUANZHUO_SHENG.has(s)) return "上|全浊";
+    if(CIZHUO_SHENG.has(s))   return "上|次浊";
+  }
   return d+"|"+qz;
 }
 var bySheng={}, byYun={}, byDiao={};
 entries.forEach(function(e){
-  var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
-  var sk=shengKey(s,d,qz,deng), yk=yunKey(y,hu,deng), dk=diaoKey(s,d,qz);
+  var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG), she=dec(e.SHE);
+  var sk=shengKey(s,d,qz,deng,hu,she,y), yk=yunKey(y,hu,deng), dk=diaoKey(s,d,qz);
   (bySheng[sk]=bySheng[sk]||[]).push(e);
   (byYun[yk]=byYun[yk]||[]).push(e);
   (byDiao[dk]=byDiao[dk]||[]).push(e);
@@ -385,6 +463,9 @@ entries.forEach(function(e){
 
 /* state maps: 中古类别 -> IPA */
 var shengMap={}, yunMap={}, diaoMap={};
+/* 手动拆分：当某组实际读音不一致时，按变体(实际读音码)分别填写。
+   userSplits[store][groupKey] = { fyCode: ipa }  store∈{sheng,yun} */
+var userSplits={sheng:{},yun:{}};
 /* 声调模型 v2：以“方言实际调类”为核心。
    dialectTones = 方言调类清单 [{id,name,value}]（如 [{阴平,55},{阳平,21},...]）
    diaoToTone   = 中古调类(d|qz) -> 方言调类 id（哪些中古类归哪个方言调）
@@ -404,7 +485,7 @@ function defaultTones(){
   addTone("去声","213");
   diaoToTone={
     "平|清":"T1", "平|濁":"T2",
-    "上|清":"T3", "上|濁":"T4",
+    "上|清":"T3", "上|濁":"T4", "上|全浊":"T4", "上|次浊":"T3",
     "去|清":"T4", "去|濁":"T4",
     "入|清":"T1", "入|全浊":"T2", "入|次浊":"T4"
   };
@@ -430,21 +511,49 @@ var wordOverride={};
 /* 抽样校验数据：{size:样本量, sample:[{chr,ms,my,md,fs,fy,fd,rs,ry,rd}]}
    rs/ry/rd=用户填写的真实声/韵/调，空串表示未填 */
 var verifyData={size:80, sample:[]};
-function exampleOf(arr){
-  // 取组内前若干个字作为候选例字，避免首字恰为生僻字
+function fyCodeOf(e, which){
+  /* FY_SHENG / FY_YUN：实际方言声/韵母（PUA 字形，无需解码，整体作"不透明变体标识"） */
+  var raw = dec(e['FY_'+which]);
+  if(!raw) return '';
+  raw = raw.replace('\ue1fd','');   // 去掉修饰符（如浊送气标记），只留主体
+  return raw==='/' ? '' : raw;
+}
+function groupVariants(arr, which){
+  /* 返回 { 实际读音码: [字...] } —— 用于检测组内是否一致 */
+  var m={};
+  arr.forEach(function(e){
+    var c=fyCodeOf(e,which);
+    if(!c) return;
+    (m[c]=m[c]||[]).push(dec(e.CHR));
+  });
+  return m;
+}
+function exampleOf(arr, variants){
+  // 优先取"最大变体"(多数实际读音)的首字作代表字，避免首字生僻/不代表
   var chars=arr.map(function(e){return dec(e.CHR);}).filter(function(c){return c.length>0;});
-  var head=chars.slice(0,4);
-  return {first: head[0]||"", count: arr.length, cands: head};
+  var first=chars[0]||"";
+  if(variants){
+    var best=null,bn=-1;
+    Object.keys(variants).forEach(function(c){ if(variants[c].length>bn){bn=variants[c].length;best=variants[c][0];} });
+    if(best) first=best;
+  }
+  return {first:first, count:arr.length, cands:chars.slice(0,4)};
 }
 
-function buildTable(tblId, mapObj, keyFn, valFn, store, ph){
+function buildTable(tblId, mapObj, keyFn, valFn, store, ph, which){
+  var storeName = (store===shengMap)?"sheng":"yun";
   var tb=document.querySelector("#"+tblId+" tbody");
   tb.innerHTML="";
   var keys=Object.keys(mapObj);
   keys.sort(function(a,b){return a.localeCompare(b,"zh");});
   keys.forEach(function(k){
-    var ex=exampleOf(mapObj[k]);
+    var arr=mapObj[k];
+    var variants=groupVariants(arr, which);
+    var variantKeys=Object.keys(variants);
+    var inconsistent = variantKeys.length>1;
+    var ex=exampleOf(arr, variants);
     var tr=document.createElement("tr");
+    if(inconsistent) tr.className="warn-row";
     var td1=document.createElement("td"); td1.className="tg"; td1.textContent=keyFn(k);
     /* 声调表：中古"入"类自动打入声标签，提示需标促声（如 5ʔ） */
     if(store===diaoMap && k.indexOf("入")===0){
@@ -467,24 +576,70 @@ function buildTable(tblId, mapObj, keyFn, valFn, store, ph){
     td2.appendChild(hint);
     var td3=document.createElement("td");
     var inp=document.createElement("input");
-    inp.type="text"; inp.className="ipa"; inp.placeholder=ph; inp.dataset.k=k; inp.dataset.store=store;
+    inp.type="text"; inp.className="ipa"; inp.placeholder=ph; inp.dataset.k=k; inp.dataset.store=storeName;
     inp.value=store[k]||"";
     inp.addEventListener("focus",function(){lastFocus=inp;});
     inp.addEventListener("input",function(){store[k]=inp.value.trim();updateProgress();autoSave();if(window.__chkT)clearTimeout(window.__chkT);window.__chkT=setTimeout(function(){infer();renderCheck();},250);});
     td3.appendChild(inp);
-    var td4=document.createElement("td");
-    td4.className="st";
-    tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);tr.appendChild(td4);
+    var td4=document.createElement("td"); td4.className="st";
+    if(inconsistent){
+      var badge=document.createElement("span"); badge.className="badge-warn";
+      badge.textContent="⚠ "+variantKeys.length+"类";
+      badge.title="组内实际读音有 "+variantKeys.length+" 种，点右侧「拆分」按变体分别填写";
+      td4.appendChild(badge);
+    } else { td4.textContent="✓"; }
+    var td5=document.createElement("td"); td5.className="op";
+    if(inconsistent){
+      var btn=document.createElement("button"); btn.className="btn ghost sm"; btn.textContent="拆分";
+      btn.addEventListener("click",function(){ if(!userSplits[storeName][k]) userSplits[storeName][k]={}; rebuildCurrent(); });
+      td5.appendChild(btn);
+    }
+    tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);tr.appendChild(td4);tr.appendChild(td5);
     tb.appendChild(tr);
+    // 已拆分则展开面板
+    if(inconsistent && userSplits[storeName][k]){
+      var ptr=document.createElement("tr"); ptr.className="split-row";
+      var ptd=document.createElement("td"); ptd.colSpan=5;
+      ptd.appendChild(buildSplitPanel(storeName,k,which,variants));
+      ptr.appendChild(ptd); tb.appendChild(ptr);
+    }
   });
   window.__keys=keys;
+}
+function buildSplitPanel(storeName,k,which,variants){
+  var wrap=document.createElement("div"); wrap.className="split-panel";
+  var title=document.createElement("div"); title.className="split-title";
+  title.textContent="按实际读音拆分（每组分别填 IPA，互不干扰）：";
+  wrap.appendChild(title);
+  var sp=userSplits[storeName][k]||{};
+  Object.keys(variants).forEach(function(code){
+    var item=document.createElement("div"); item.className="split-item";
+    var charsTxt=variants[code].slice(0,40).join("");
+    var lbl=document.createElement("span"); lbl.className="split-chars"; lbl.textContent="〔"+charsTxt+"〕";
+    lbl.title="这些字实际读音属同一类，应填同一 IPA（共 "+variants[code].length+" 字）";
+    var inp=document.createElement("input"); inp.type="text"; inp.className="ipa sm"; inp.placeholder="IPA";
+    inp.value=sp[code]||"";
+    inp.addEventListener("focus",function(){ lastFocus=inp; });   // 接住底部 IPA 面板：否则符号会插进别的框
+    bindIpaPop(inp, storeName);   // 点击拆分框就地弹出浮动音标面板，直接点符号填入
+    inp.addEventListener("input",function(){
+      if(!userSplits[storeName][k]) userSplits[storeName][k]={};
+      userSplits[storeName][k][code]=inp.value.trim();
+      autoSave(); infer(); renderCheck();
+    });
+    item.appendChild(lbl); item.appendChild(inp);
+    wrap.appendChild(item);
+  });
+  var del=document.createElement("button"); del.className="btn ghost sm"; del.textContent="删除拆分（合并回默认）";
+  del.addEventListener("click",function(){ delete userSplits[storeName][k]; autoSave(); rebuildCurrent(); infer(); renderCheck(); });
+  wrap.appendChild(del);
+  return wrap;
 }
 /* 切换/更换例字后，仅重建当前表（保留输入框焦点由浏览器处理） */
 function rebuildCurrent(){
   var t=document.querySelector(".tab.active"); if(!t) return;
   var s=t.dataset.t;
-  if(s==="sheng") buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
-  else if(s==="yun") buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ");
+  if(s==="sheng") buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ","SHENG");
+  else if(s==="yun") buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ","YUN");
   else if(s==="diao") buildDiaoTab();
   updateProgress();
 }
@@ -492,8 +647,8 @@ function rebuildCurrent(){
    必须重建而非只重建当前 tab，否则未重建表的输入框闭包仍指向被丢弃的旧 map 对象，
    导致用户填写的声/韵/调写不进 infer() 实际读取的 map（典型症状：声调表填了却没被读取） */
 function rebuildAll(){
-  buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
-  buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ");
+  buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ","SHENG");
+  buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ","YUN");
   buildDiaoTab();
   updateProgress();
 }
@@ -569,9 +724,11 @@ document.querySelectorAll(".tab").forEach(function(t){
     if(t.dataset.t==="check"){renderCheck();}
     if(t.dataset.t==="verify"){renderVerifyTable();}
     if(t.dataset.t==="audit"){renderAudit();}
+    if(t.dataset.t==="laws"){renderLaws();}
+    if(t.dataset.t==="std3"){renderStd3();}
     renderPalette(t.dataset.t);            // 面板随当前表切换（声母/韵母/声调各一套）
     var io=document.getElementById("ioGrid");
-    if(t.dataset.t==="preview"||t.dataset.t==="sys") io.classList.add("hide-palette");
+    if(t.dataset.t==="preview"||t.dataset.t==="sys"||t.dataset.t==="laws"||t.dataset.t==="std3") io.classList.add("hide-palette");
     else io.classList.remove("hide-palette");
     if(t.dataset.t==="preview") renderPreview();
     if(t.dataset.t==="sys") renderSystem();
@@ -726,14 +883,25 @@ function updateProgress(){
 }
 
 /* ---------- infer ---------- */
+function resolveIPA(storeName, groupKey, e){
+  /* 优先用「手动拆分」的逐变体 IPA；否则回退到该组默认 IPA */
+  var which = (storeName==="sheng")?"SHENG":"YUN";
+  var sp = userSplits[storeName][groupKey];
+  if(sp){
+    var code=fyCodeOf(e,which);
+    if(code && sp[code]!==undefined && sp[code]!=="") return sp[code];
+  }
+  return (storeName==="sheng"?shengMap:yunMap)[groupKey]||"";
+}
 function infer(){
   var rows=[];
   var missing={sheng:[],yun:[],diao:[]};
   entries.forEach(function(e){
-    var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG);
+    var s=dec(e.SHENG), y=dec(e.YUN), d=dec(e.DIAO), qz=dec(e.QZ), hu=dec(e.HU), deng=dec(e.DENG), she=dec(e.SHE);
     var chrHex=e.CHR;                       // CHR 为 hex 编码，作为逐字覆盖键
     var dk=diaoKey(s,d,qz);
-    var fs=shengMap[shengKey(s,d,qz,deng)]||"", fy=yunMap[yunKey(y,hu,deng)]||"", fd=diaoMap[dk]||"";
+    var gkSheng=shengKey(s,d,qz,deng,hu,she,y);
+    var fs=resolveIPA("sheng",gkSheng,e)||"", fy=resolveIPA("yun",yunKey(y,hu,deng),e)||"", fd=diaoMap[dk]||"";
     var over=wordOverride[chrHex];
     var overAny=false;
     if(over){
@@ -1106,6 +1274,525 @@ function renderSystem(){
   document.getElementById("sysOut").innerHTML=html;
 }
 
+/* ---------- 音系规律自检 (P0: 跨组合流检测 + 声韵配合矩阵) ---------- */
+var SHENG_SERIES={
+ "幫":"幫组(重唇)","滂":"幫组(重唇)","並":"幫组(重唇)","明":"幫组(重唇)",
+ "非":"非组(轻唇)","敷":"非组(轻唇)","奉":"非组(轻唇)","微":"非组(轻唇)",
+ "端":"端组","透":"端组","定":"端组","泥":"端组","娘":"端组",
+ "知":"知组","徹":"知组","澄":"知组",
+ "精":"精组","清":"精组","從":"精组","心":"精组","邪":"精组",
+ "莊":"莊组","初":"莊组","崇":"莊组","生":"莊组","俟":"莊组",
+ "章":"章组","昌":"章组","船":"章组","書":"章组","禪":"章组",
+ "見":"見组","溪":"見组","羣":"見组","曉":"見组","匣":"見组",
+ "影":"影组(零声母)","疑":"影组(零声母)","云":"影组(零声母)","以":"影组(零声母)",
+ "來":"來母","日":"日母"
+};
+function shengSeries(k){ var stem=k.split('·')[0]; return SHENG_SERIES[stem]||stem; }
+
+function lawsSource(){
+  var cb=document.getElementById('lawsUseSample');
+  var useSample=cb&&cb.checked;
+  return {
+    useSample:useSample,
+    groupIPA:function(store,key,arr,which){
+      if(useSample){
+        var v=groupVariants(arr,which); var best=null,bn=-1;
+        Object.keys(v).forEach(function(c){ if(v[c].length>bn){bn=v[c].length;best=c;} });
+        return best||'';
+      }
+      var m= store==='sheng'?shengMap:(store==='yun'?yunMap:diaoMap);
+      return m[key]||'';
+    },
+    entryIPA:function(e,which){
+      if(useSample) return fyCodeOf(e,which);
+      if(which==='SHENG') return resolveIPA('sheng',shengKey(dec(e.SHENG),dec(e.DIAO),dec(e.QZ),dec(e.DENG),dec(e.HU),dec(e.SHE),dec(e.YUN)),e);
+      if(which==='YUN') return resolveIPA('yun',yunKey(dec(e.YUN),dec(e.HU),dec(e.DENG)),e);
+      return diaoMap[diaoKey(dec(e.SHENG),dec(e.DIAO),dec(e.QZ))]||'';
+    }
+  };
+}
+function detectMergers(byObj,store,which,stemFn){
+  var src=lawsSource(); var byIPA={};
+  Object.keys(byObj).forEach(function(k){
+    var arr=byObj[k]; var ipa=src.groupIPA(store,k,arr,which); if(!ipa) return;
+    var stem=stemFn?stemFn(k):k;
+    (byIPA[ipa]=byIPA[ipa]||[]).push({key:k,stem:stem,ex:arr.slice(0,4).map(function(e){return dec(e.CHR);}).join('、')});
+  });
+  var res=[];
+  Object.keys(byIPA).forEach(function(ipa){
+    if(byIPA[ipa].length>=2){
+      var stems={}; byIPA[ipa].forEach(function(o){stems[o.stem]=true;});
+      res.push({ipa:ipa,items:byIPA[ipa],distinct:Object.keys(stems).length>=2});
+    }
+  });
+  res.sort(function(a,b){return b.items.length-a.items.length;});
+  return res;
+}
+function renderMergerBlock(title,list){
+  var nD=list.filter(function(x){return x.distinct;}).length;
+  var h='<h4 style="margin:16px 0 6px">'+title+'（跨系列疑似合流 '+nD+' 项 / 同音聚集 '+list.length+' 个）</h4>';
+  if(!list.length) return h+'<p class="hint">该维度暂无相同读音的不同中古类聚集（或尚未填写）。</p>';
+  h+='<div class="scroll" style="max-height:300px;overflow:auto"><table class="grid"><thead><tr><th>读音(IPA)</th><th>中古类（例字）</th><th>判定</th></tr></thead><tbody>';
+  list.forEach(function(o){
+    var cls=o.distinct?'warn-row':'';
+    var judge=o.distinct?'⚠ 跨系列·疑似合流':'同系列(清浊/环境变体·正常)';
+    var cells=o.items.map(function(it){return it.key+'（'+it.ex+'）';}).join('；');
+    h+='<tr class="'+cls+'"><td class="tg">'+o.ipa+'</td><td class="tg">'+cells+'</td><td>'+judge+'</td></tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+function renderToneMerge(){
+  var src=lawsSource(); var byVal={};
+  Object.keys(byDiao).forEach(function(k){
+    var ipa=src.groupIPA('diao',k,byDiao[k],'DIAO'); if(!ipa) return;
+    (byVal[ipa]=byVal[ipa]||[]).push(k);
+  });
+  var keys=Object.keys(byVal);
+  var h='<h4 style="margin:16px 0 6px">③ 声调归并表（中古调类→方言调值，归并属正常）</h4>';
+  if(!keys.length) return h+'<p class="hint">尚未填声调。</p>';
+  h+='<div class="scroll" style="max-height:240px;overflow:auto"><table class="grid"><thead><tr><th>方言调值</th><th>归到的中古调类</th><th>数量</th></tr></thead><tbody>';
+  keys.sort(function(a,b){return byVal[b].length-byVal[a].length;}).forEach(function(v){
+    h+='<tr><td class="tg">'+v+'</td><td class="tg">'+byVal[v].join('、')+'</td><td>'+byVal[v].length+'</td></tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+function buildMatrix(src){
+  var mat={},shengSet={},yunSet={};
+  entries.forEach(function(e){
+    var s=src.entryIPA(e,'SHENG'),y=src.entryIPA(e,'YUN');
+    if(!s||!y) return;
+    shengSet[s]=true; yunSet[y]=true;
+    mat[s]=mat[s]||{}; mat[s][y]=(mat[s][y]||0)+1;
+  });
+  return {mat:mat,shengs:Object.keys(shengSet).sort(),yuns:Object.keys(yunSet).sort()};
+}
+function renderMatrix(M){
+  var shengs=M.shengs,yuns=M.yuns;
+  if(!shengs.length||!yuns.length) return '<h4 style="margin:16px 0 6px">④ 声韵配合矩阵</h4><p class="hint">声母或韵母尚未填写，无法构建矩阵。</p>';
+  var max=1;
+  shengs.forEach(function(s){yuns.forEach(function(y){var c=M.mat[s][y]||0; if(c>max)max=c;});});
+  var html='<h4 style="margin:16px 0 6px">④ 声韵配合矩阵（行=声母IPA，列=韵母IPA，格内=字表出现字数，空格=未现组合·可能为音系空缺或未被抽样）</h4>';
+  html+='<div class="scroll" style="max-height:62vh;overflow:auto"><table class="grid" style="font-size:12px"><thead><tr><th style="position:sticky;left:0;background:var(--soft);z-index:2">声＼韵</th>';
+  yuns.forEach(function(y){html+='<th title="'+y+'">'+y+'</th>';});
+  html+='</tr></thead><tbody>';
+  shengs.forEach(function(s){
+    html+='<tr><th style="position:sticky;left:0;background:var(--soft);text-align:left;z-index:1">'+s+'</th>';
+    yuns.forEach(function(y){
+      var c=M.mat[s][y]||0;
+      if(c===0) html+='<td class="gap"></td>';
+      else { var a=(0.15+0.6*(c/max)).toFixed(2); html+='<td style="background:rgba(120,140,220,'+a+')" title="'+s+' + '+y+'：'+c+' 字">'+c+'</td>'; }
+    });
+    html+='</tr>';
+  });
+  return html+'</tbody></table></div>';
+}
+function renderLaws(){
+  var src=lawsSource();
+  var note=document.getElementById('lawsNote');
+  var filledS=Object.keys(shengMap).filter(function(k){return shengMap[k];}).length;
+  var filledY=Object.keys(yunMap).filter(function(k){return yunMap[k];}).length;
+  if(!src.useSample && filledS+filledY===0){
+    note.textContent='（你还没填声/韵——先去声母表/韵母表填写，或勾选"用样例音演示"看效果）';
+  } else {
+    note.textContent='数据源：'+(src.useSample?'内置样例(大方)':'你填的读音')+'；声母已填 '+filledS+' 类，韵母 '+filledY+' 类';
+  }
+  var mS=detectMergers(bySheng,'sheng','SHENG',shengSeries);
+  var mY=detectMergers(byYun,'yun','YUN',function(k){return k.split('·')[0];});
+  var html='';
+  html+=renderMergerBlock('① 声母跨组合流检测',mS);
+  html+=renderMergerBlock('② 韵母跨组合流检测',mY);
+  html+=renderToneMerge();
+  document.getElementById('lawsMerger').innerHTML=html;
+  var M=buildMatrix(src);
+  document.getElementById('lawsMatrix').innerHTML=renderMatrix(M);
+  renderPhonemeBlocks();
+  document.getElementById('lawsContrast').innerHTML=renderContrastBlock();
+}
+
+/* ============ 方言调查字表·标准三表（附录格式） ============ */
+/* ① 方言声母表：中古声母按传统分组（唇→舌→齿→牙→喉），每类中古声母一行，
+   列出该类中古声母在方言中的实际读音（含平仄/洪细/开合分化）——定"声类+声母"的标准表。 */
+var SHENG_GROUPS=[
+  {bu:'唇音·重唇',items:[['幫','清'],['滂','次清'],['並','全浊'],['明','次浊']]},
+  {bu:'唇音·轻唇',items:[['非','清'],['敷','次清'],['奉','全浊'],['微','次浊']]},
+  {bu:'舌音·舌头',items:[['端','清'],['透','次清'],['定','全浊'],['泥','次浊']]},
+  {bu:'舌音·半舌',items:[['來','次浊']]},
+  {bu:'舌音·舌上',items:[['知','清'],['徹','次清'],['澄','全浊'],['娘','次浊']]},
+  {bu:'齿音·齿头',items:[['精','清'],['清','次清'],['從','全浊'],['心','清'],['邪','全浊']]},
+  {bu:'齿音·正齿(莊)',items:[['莊','清'],['初','次清'],['崇','全浊'],['生','清'],['俟','全浊']]},
+  {bu:'齿音·正齿(章)',items:[['章','清'],['昌','次清'],['船','全浊'],['書','清'],['禪','全浊'],['日','次浊']]},
+  {bu:'牙音',items:[['見','清'],['溪','次清'],['羣','全浊'],['疑','次浊']]},
+  {bu:'喉音',items:[['曉','清'],['匣','全浊'],['影','清'],['云','次浊'],['以','次浊']]}
+];
+/* ② 方言韵母表：16 摄标准顺序 × 开合 × 等 */
+var SHE_ORDER=['果','假','遇','蟹','止','效','流','咸','深','山','臻','宕','江','曾','梗','通'];
+var YUN_SLOTS=['開·一','開·二','開·三','開·四','合·一','合·二','合·三','合·四'];
+/* ③ 方言声调表：中古调类 × 清浊 */
+var DIAO_ROWS=[
+  {d:'平',cells:[['平|清','清平'],['平|濁','浊平']]},
+  {d:'上',cells:[['上|清','清上'],['上|全浊','全浊上'],['上|次浊','次浊上']]},
+  {d:'去',cells:[['去|清','清去'],['去|濁','浊去']]},
+  {d:'入',cells:[['入|清','清入'],['入|全浊','全浊入'],['入|次浊','次浊入']]}
+];
+function stdFindShengReflex(s){
+  var map={};
+  entries.forEach(function(e){
+    if(dec(e.SHENG)!==s) return;
+    var d=dec(e.DIAO), qz=dec(e.QZ), deng=dec(e.DENG), hu=dec(e.HU), she=dec(e.SHE), y=dec(e.YUN);
+    var sk=shengKey(s,d,qz,deng,hu,she,y);
+    var ipa=resolveIPA('sheng',sk,e)||'';
+    var env=sk.indexOf('·')>=0?sk.slice(sk.indexOf('·')+1):'';
+    var rec=map[ipa]; if(!rec){ rec=map[ipa]={ipa:ipa,envs:{},ex:dec(e.CHR)}; }
+    if(env) rec.envs[env]=1;
+  });
+  return Object.keys(map).map(function(k){
+    var r=map[k]; var envs=Object.keys(r.envs);
+    return {ipa:r.ipa, env:envs.join('/'), ex:r.ex};
+  });
+}
+function renderStdSheng(){
+  var h='<h4 style="margin:14px 0 6px">① 方言声母表（中古声母 → 方言声母）</h4>';
+  h+='<table class="grid"><thead><tr><th style="width:140px">部位</th><th style="width:80px">中古声母</th><th style="width:70px">清浊</th><th>方言声母（实际读音）</th></tr></thead><tbody>';
+  SHENG_GROUPS.forEach(function(g){
+    g.items.forEach(function(it,idx){
+      var s=it[0], qz=it[1];
+      var refs=stdFindShengReflex(s);
+      var cell;
+      if(refs.length===0) cell='<span class="hint">—</span>';
+      else cell=refs.map(function(r){
+        var label=r.env?('<span class="hint">'+escH(r.env)+'</span> '):'';
+        var ipa=r.ipa?escH(r.ipa):'<span class="hint">（未填）</span>';
+        return label+ipa;
+      }).join(' &nbsp;/&nbsp; ');
+      h+='<tr>'+(idx===0?'<td class="tg" rowspan="'+g.items.length+'">'+escH(g.bu)+'</td>':'')
+        +'<td class="tg">'+escH(s)+'</td><td class="tg">'+escH(qz)+'</td><td>'+cell+'</td></tr>';
+    });
+  });
+  h+='</tbody></table>';
+  document.getElementById('std3Sheng').innerHTML=h;
+}
+function stdCollectYun(){
+  var res={};
+  entries.forEach(function(e){
+    var she=dec(e.SHE), hu=dec(e.HU), deng=dec(e.DENG), y=dec(e.YUN);
+    var yk=yunKey(y,hu,deng);
+    var ipa=resolveIPA('yun',yk,e)||'';
+    var slot=hu+'·'+deng;
+    res[she]=res[she]||{};
+    res[she][slot]=res[she][slot]||[];
+    if(!res[she][slot].some(function(r){return r.yun===y;})) res[she][slot].push({yun:y,ipa:ipa,ex:dec(e.CHR)});
+  });
+  return res;
+}
+function renderStdYun(){
+  var data=stdCollectYun();
+  var h='<h4 style="margin:16px 0 6px">② 方言韵母表（16 摄 × 开合 × 等）</h4>';
+  h+='<table class="grid"><thead><tr><th style="width:80px">摄</th>';
+  YUN_SLOTS.forEach(function(sl){ h+='<th>'+escH(sl.replace('·',''))+'</th>'; });
+  h+='</tr></thead><tbody>';
+  SHE_ORDER.forEach(function(she){
+    h+='<tr><td class="tg">'+escH(she)+'</td>';
+    YUN_SLOTS.forEach(function(sl){
+      var arr=(data[she]&&data[she][sl])||[];
+      if(!arr.length){ h+='<td class="hint">—</td>'; }
+      else{
+        var cell=arr.map(function(r){
+          var ipa=r.ipa?escH(r.ipa):'<span class="hint">未填</span>';
+          return '<b>'+escH(r.yun)+'</b><br>'+ipa;
+        }).join('<br>');
+        h+='<td>'+cell+'</td>';
+      }
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  document.getElementById('std3Yun').innerHTML=h;
+}
+function renderStdDiao(){
+  var h='<h4 style="margin:16px 0 6px">③ 方言声调表（中古调类 × 清浊 → 方言调类 / 调值）</h4>';
+  h+='<table class="grid"><thead><tr><th style="width:60px">中古调</th><th>分类</th><th style="width:160px">方言调类</th><th style="width:120px">调值</th></tr></thead><tbody>';
+  DIAO_ROWS.forEach(function(row){
+    row.cells.forEach(function(c,idx){
+      var key=c[0], label=c[1];
+      var val=diaoMap[key]||'';
+      var tid=diaoToTone[key]; var tname=tid?(toneById(tid)||{}).name||'':'';
+      h+='<tr>'+(idx===0?'<td class="tg" rowspan="'+row.cells.length+'">'+escH(row.d)+'</td>':'')
+        +'<td class="tg">'+escH(label)+'</td>'
+        +'<td class="tg">'+(tname?escH(tname):'<span class="hint">—</span>')+'</td>'
+        +'<td>'+(val?escH(val):'<span class="hint">（未填）</span>')+'</td></tr>';
+    });
+  });
+  h+='</tbody></table>';
+  document.getElementById('std3Diao').innerHTML=h;
+}
+function renderStd3(){ renderStdSheng(); renderStdYun(); renderStdDiao(); }
+function exportStd3Csv(){
+  var rows=[];
+  rows.push(['【方言声母表】']);
+  rows.push(['部位','中古声母','清浊','方言声母','分化环境','例字']);
+  SHENG_GROUPS.forEach(function(g){ g.items.forEach(function(it){
+    var s=it[0]; var refs=stdFindShengReflex(s);
+    if(!refs.length){ rows.push([g.bu,s,it[1],'—','','']); }
+    else refs.forEach(function(r){ rows.push([g.bu,s,it[1],r.ipa||'',r.env||'',r.ex||'']); });
+  }); });
+  rows.push([]);
+  var data=stdCollectYun();
+  rows.push(['【方言韵母表】']);
+  rows.push(['摄'].concat(YUN_SLOTS.map(function(s){return s.replace('·','');})));
+  SHE_ORDER.forEach(function(she){
+    var r=[she];
+    YUN_SLOTS.forEach(function(sl){
+      var arr=(data[she]&&data[she][sl])||[];
+      r.push(arr.map(function(x){return x.yun+(x.ipa?('='+x.ipa):'');}).join('/')||'—');
+    });
+    rows.push(r);
+  });
+  rows.push([]);
+  rows.push(['【方言声调表】']);
+  rows.push(['中古调','分类','方言调类','调值']);
+  DIAO_ROWS.forEach(function(row){ row.cells.forEach(function(c){
+    var key=c[0]; var val=diaoMap[key]||''; var tid=diaoToTone[key]; var tname=tid?(toneById(tid)||{}).name||'':'';
+    rows.push([row.d,c[1],tname,val]);
+  }); });
+  download('方言调查字表_标准三表.csv', csvFrom(rows), 'text/csv;charset=utf-8');
+  toast('已导出标准三表 CSV');
+}
+document.getElementById('btnLaws').addEventListener('click',renderLaws);
+document.getElementById('btnStd3Csv').addEventListener('click',exportStd3Csv);
+document.getElementById('lawsUseSample').addEventListener('change',renderLaws);
+document.getElementById('btnLawsCsv').addEventListener('click',function(){
+  var src=lawsSource(); var M=buildMatrix(src);
+  if(!M.shengs.length||!M.yuns.length){toast('无数据可导出');return;}
+  var rows=[['声母\\韵母'].concat(M.yuns)];
+  M.shengs.forEach(function(s){var r=[s];M.yuns.forEach(function(y){r.push(M.mat[s][y]||0);});rows.push(r);});
+  download('声韵配合矩阵.csv',csvFrom(rows),'text/csv;charset=utf-8');
+  toast('已导出声韵配合矩阵 CSV');
+});
+
+/* ============ P1：音位归并（⑤ 记音一致性 + ⑥ 最小对立/互补分布） ============ */
+function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* IPA 归一化：把"极可能是同一个音的不同写法"并到一起，供人工确认。
+   刻意保守——只处理方言学界公认的异写，并剥离组合附加符/长音符；
+   送气 ʰ(02B0)、喉塞 ʔ(0294)、浊送气 ʱ(02B1) 一律保留（汉语方言里通常具音位性）。 */
+function normIPA(s){
+  if(!s) return '';
+  var t=String(s);
+  if(t.normalize) t=t.normalize('NFD');
+  t=t.replace(/[\u0300-\u036f]/g,'');    // 组合附加符：调符 / 鼻化 / 清化 …
+  t=t.replace(/[\s\u02d0\u02d1]/g,'');   // 空白、长音符 ː ˑ
+  t=t.replace(/\u0251/g,'a');            // ɑ→a
+  t=t.replace(/\u0250/g,'a');            // ɐ→a
+  t=t.replace(/\u027f/g,'\u0268');       // ɿ→ɨ
+  t=t.replace(/\u0285/g,'\u0268');       // ʅ→ɨ
+  t=t.replace(/\u0269/g,'\u0268');       // ɩ→ɨ
+  t=t.replace(/g/g,'\u0261');            // 拉丁 g→ɡ
+  t=t.replace(/\u02a6/g,'ts');           // ʦ→ts
+  t=t.replace(/\u02a3/g,'dz');           // ʣ→dz
+  t=t.replace(/\u02a7/g,'t\u0283');      // ʧ→tʃ
+  t=t.replace(/\u02a4/g,'d\u0292');      // ʤ→dʒ
+  return t;
+}
+/* 收集某维度（sheng/yun）上出现过的全部原始写法 + 用到它的中古类 */
+function collectStoreIPA(store){
+  var m = (store==='sheng')?shengMap:yunMap, map={};
+  Object.keys(m).forEach(function(k){
+    var v=m[k]; if(!v) return;
+    if(!map[v]) map[v]={groups:[],n:0};
+    map[v].groups.push(k); map[v].n++;
+  });
+  var sp=userSplits[store]||{};
+  Object.keys(sp).forEach(function(gk){
+    Object.keys(sp[gk]).forEach(function(code){
+      var v=sp[gk][code]; if(!v) return;
+      if(!map[v]) map[v]={groups:[],n:0};
+      map[v].groups.push(gk); map[v].n++;
+    });
+  });
+  return Object.keys(map).map(function(v){ return {raw:v,groups:map[v].groups,n:map[v].n}; });
+}
+/* ⑤：归一化后撞在一起的多种写法 = 疑似同一音位的异写 */
+function detectVariants(store){
+  var vals=collectStoreIPA(store), byNorm={};
+  vals.forEach(function(o){
+    var n=normIPA(o.raw); if(!n) return;
+    (byNorm[n]=byNorm[n]||[]).push(o);
+  });
+  var out=[];
+  Object.keys(byNorm).forEach(function(n){
+    var list=byNorm[n], seen={};
+    list.forEach(function(o){ seen[o.raw]=true; });
+    var raws=Object.keys(seen);
+    if(raws.length>=2) out.push({norm:n, items:list.slice().sort(function(a,b){return b.n-a.n;}), raws:raws});
+  });
+  out.sort(function(a,b){ return b.items.length-a.items.length; });
+  return out;
+}
+/* 一键统一写法（只改音系表里的 IPA，不动例字/逐字修改） */
+function unifyIPA(store, raws, target){
+  var m=(store==='sheng')?shengMap:yunMap, n=0;
+  Object.keys(m).forEach(function(k){
+    if(m[k] && raws.indexOf(m[k])>=0 && m[k]!==target){ m[k]=target; n++; }
+  });
+  var sp=userSplits[store]||{};
+  Object.keys(sp).forEach(function(gk){
+    Object.keys(sp[gk]).forEach(function(code){
+      if(sp[gk][code] && raws.indexOf(sp[gk][code])>=0 && sp[gk][code]!==target){ sp[gk][code]=target; n++; }
+    });
+  });
+  return n;
+}
+var __variantClusters={sheng:[],yun:[]};
+function renderVariantBlock(title, clusters, store){
+  var h='<h4 style="margin:16px 0 6px">'+title+'（疑似同一音位的不同写法 '+clusters.length+' 组）</h4>';
+  if(!clusters.length) return h+'<p class="hint">未发现疑似异写——你填的写法是一致的。</p>';
+  h+='<p class="hint" style="margin-bottom:6px">同一"归一化形式"下出现了多种写法。若它们在你嘴里<b>确实是同一个音</b>，点右侧「统一为」合并成一种；若确实是不同音位，不点即可（工具不会自动改）。</p>';
+  h+='<div class="scroll" style="max-height:320px;overflow:auto"><table class="grid"><thead><tr>'+
+     '<th style="width:90px">归一化</th><th>你写成的形式（用到它的中古类数）</th><th style="width:230px">涉及中古类</th><th style="width:220px">操作</th>'+
+     '</tr></thead><tbody>';
+  clusters.forEach(function(c,ci){
+    var forms=c.items.map(function(o){ return '<span class="tg">'+escH(o.raw)+'</span> <span class="hint">('+o.n+')</span>'; }).join('　');
+    var gs=[], seen={};
+    c.items.forEach(function(o){ o.groups.forEach(function(g){ if(!seen[g]){ seen[g]=1; gs.push(g); } }); });
+    h+='<tr class="warn-row"><td class="tg">'+escH(c.norm)+'</td><td>'+forms+'</td>'+
+       '<td class="tg" style="font-size:12px">'+escH(gs.slice(0,8).join('、'))+(gs.length>8?' 等 '+gs.length+' 类':'')+'</td><td>';
+    c.items.forEach(function(o,oi){
+      h+='<button class="btn sm unify" data-store="'+store+'" data-ci="'+ci+'" data-target="'+escH(o.raw)+'">统一为 '+escH(o.raw)+'</button> ';
+    });
+    h+='</td></tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+function renderPhonemeBlocks(){
+  var cs=detectVariants('sheng'), cy=detectVariants('yun');
+  __variantClusters.sheng=cs; __variantClusters.yun=cy;
+  document.getElementById('lawsPhoneme').innerHTML=
+    renderVariantBlock('⑤ 记音一致性 · 声母异写', cs, 'sheng')+
+    renderVariantBlock('⑤ 记音一致性 · 韵母异写', cy, 'yun');
+}
+document.addEventListener('click', function(ev){
+  var b=(ev.target&&ev.target.closest)?ev.target.closest('.unify'):null;
+  if(!b) return;
+  var store=b.getAttribute('data-store'), ci=parseInt(b.getAttribute('data-ci'),10), target=b.getAttribute('data-target');
+  var c=(__variantClusters[store]||[])[ci]; if(!c) return;
+  var n=unifyIPA(store, c.raws, target);
+  buildAll(); infer(); renderLaws(); autoSave();
+  toast('已把 '+n+' 处写法统一为「'+target+'」');
+});
+
+/* ⑥ 最小对立 / 互补分布：判断两个音是真对立，还是同一音位的条件变体。
+   环境定义：声母的环境=(韵母,声调)；韵母=(声母,声调)；声调=(声母,韵母)。
+   两个音"在任何相同环境下都不同时出现"= 互补分布 → 疑似条件变体。 */
+var CONTRAST_DIMS=[
+  {k:'s', label:'声母', get:function(r){return r.fs;}, env:function(r){return r.fy+' / '+r.fd;}, envLabel:'韵母 / 声调'},
+  {k:'y', label:'韵母', get:function(r){return r.fy;}, env:function(r){return r.fs+' / '+r.fd;}, envLabel:'声母 / 声调'},
+  {k:'d', label:'声调', get:function(r){return r.fd;}, env:function(r){return r.fs+' / '+r.fy;}, envLabel:'声母 / 韵母'}
+];
+function buildContrast(){
+  var rows=infer();                      // 取最新逐字推演音（含逐字覆盖与手动拆分）
+  return CONTRAST_DIMS.map(function(D){
+    var envMap={}, occ={};
+    rows.forEach(function(r){
+      var v=D.get(r), e=D.env(r);
+      if(!v||!e) return;
+      (envMap[e]=envMap[e]||{});
+      (envMap[e][v]=envMap[e][v]||[]).push(r.chr);
+      if(!occ[v]) occ[v]={n:0,chars:[]};
+      occ[v].n++; if(occ[v].chars.length<3) occ[v].chars.push(r.chr);
+    });
+    var vals=Object.keys(occ), shared={}, minPairs=[];
+    Object.keys(envMap).forEach(function(e){
+      var vs=Object.keys(envMap[e]);
+      for(var i=0;i<vs.length;i++) for(var j=i+1;j<vs.length;j++){
+        var a=vs[i], b=vs[j], key=a+'||'+b;
+        if(!shared[key]) shared[key]={n:0,pairs:[]};
+        shared[key].n++;
+        minPairs.push({env:e,a:a,b:b,ca:envMap[e][a][0],cb:envMap[e][b][0]});
+      }
+    });
+    var comp=[], contrasting=0;
+    for(var i=0;i<vals.length;i++) for(var j=i+1;j<vals.length;j++){
+      var key=vals[i]+'||'+vals[j];
+      if(shared[key]) contrasting++;
+      else{
+        var mn=Math.min(occ[vals[i]].n, occ[vals[j]].n);
+        comp.push({a:vals[i],b:vals[j],ca:occ[vals[i]].chars[0],cb:occ[vals[j]].chars[0],
+                   na:occ[vals[i]].n, nb:occ[vals[j]].n,
+                   /* 置信度：两音出现得越多却从不同现，越可能是真互补；
+                      低频音对多半只是字表抽样不足，故标"低" */
+                   conf: mn>=30?'高':(mn>=10?'中':'低')});
+      }
+    }
+    /* 按"总出现次数"降序：最常用却从不同现的对排最前（证据最强）；
+       低频对沉到最后，因其多半只是抽样不足 */
+    comp.sort(function(x,y){ return (y.na+y.nb)-(x.na+x.nb); });
+    return {label:D.label, k:D.k, envLabel:D.envLabel, vals:vals, occ:occ,
+            shared:shared, comp:comp, contrasting:contrasting, minPairs:minPairs};
+  });
+}
+function renderContrastBlock(){
+  var dims=buildContrast();
+  var h='<h4 style="margin:16px 0 6px">⑥ 最小对立与互补分布（音位化核查）</h4>';
+  h+='<p class="hint" style="line-height:1.6;margin-bottom:8px">'+
+     '判断两个音是<b>真对立</b>还是<b>同一音位的条件变体</b>：若两个音<b>在任何相同环境下都不同时出现</b>，即<b>互补分布</b>，通常可归并为一个音位。<br/>'+
+     '反过来，若它们在<b>同一环境</b>下都能出现并能区别意义，就构成<b>最小对立对</b>，证明二者是不同音位。<br/>'+
+     '<b>两点必须注意：</b>① 字表只有约 3800 个抽样字，"没同时出现"也可能是<b>抽样不足</b>，不等于真互补；'+
+     '② 汉语方言学传统上常因<b>中古来源不同</b>而把互补分布的音仍分立为两个声母（典型如洪细/尖团：tɕ 只接细音、tʂ 只接洪音），是否归并请按你老师的要求判断。本表只负责把证据摆出来。</p>';
+  h+='<table class="grid" style="max-width:820px"><thead><tr><th>维度</th><th>音位数</th><th>有最小对立</th><th>互补分布（疑似条件变体）</th></tr></thead><tbody>';
+  dims.forEach(function(D){
+    h+='<tr><td>'+D.label+'</td><td>'+D.vals.length+'</td><td>'+D.contrasting+' 对</td>'+
+       '<td>'+(D.comp.length?'<span class="badge-warn">'+D.comp.length+' 对</span>':'0 对')+'</td></tr>';
+  });
+  h+='</tbody></table>';
+  dims.forEach(function(D,di){
+    h+='<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:bold">'+D.label+'：互补分布 '+D.comp.length+' 对 · 最小对立对 '+D.minPairs.length+' 条</summary>';
+    if(D.comp.length){
+      h+='<h5 style="margin:10px 0 4px;color:#9a6b00">互补分布对（在任何相同 '+D.envLabel+' 下都不同时出现 → 疑似同一音位的条件变体）</h5>';
+      h+='<p class="hint" style="margin-bottom:4px">按「两音出现总次数」<b>降序</b>排：越靠前＝两个音都很常用却从不同现，互补的证据越强；'+
+         '排后面的多半是低频音，<b>只是字表没抽到</b>，未必真互补。<b>置信度</b>按两音中较少的那个的出现字数定：'+
+         '≥30 字＝高，10–29＝中，＜10＝低（存疑）。</p>';
+      h+='<div class="scroll" style="max-height:280px;overflow:auto"><table class="grid"><thead><tr>'+
+         '<th style="width:90px">音 A</th><th style="width:80px">例字 / 字数</th><th style="width:90px">音 B</th><th style="width:80px">例字 / 字数</th><th style="width:70px">置信度</th></tr></thead><tbody>';
+      D.comp.slice(0,80).forEach(function(p){
+        var ccls = p.conf==='高'?'badge-warn':'';
+        h+='<tr class="warn-row"><td class="tg">'+escH(p.a)+'</td><td class="tg">'+escH(p.ca||'—')+' <span class="hint">('+p.na+')</span></td>'+
+           '<td class="tg">'+escH(p.b)+'</td><td class="tg">'+escH(p.cb||'—')+' <span class="hint">('+p.nb+')</span></td>'+
+           '<td><span class="'+ccls+'">'+p.conf+'</span></td></tr>';
+      });
+      h+='</tbody></table></div>';
+      if(D.comp.length>80) h+='<p class="hint">仅列出证据最强的 80 对（按出现总字数降序），共 '+D.comp.length+' 对。</p>';
+    } else {
+      h+='<p class="hint">无互补分布对——每两个音都至少在某个相同环境下同时出现过。</p>';
+    }
+    if(D.minPairs.length){
+      h+='<h5 style="margin:12px 0 4px">最小对立对抽样（同一环境下仅此音不同 → 证明两音对立）</h5>';
+      h+='<div class="scroll" style="max-height:280px;overflow:auto"><table class="grid"><thead><tr>'+
+         '<th>共同环境（'+D.envLabel+'）</th><th style="width:100px">音 A</th><th style="width:60px">例字</th><th style="width:100px">音 B</th><th style="width:60px">例字</th></tr></thead><tbody>';
+      var step=Math.max(1,Math.floor(D.minPairs.length/30));
+      for(var i=0;i<D.minPairs.length && i<30*step;i+=step){
+        var p=D.minPairs[i];
+        h+='<tr><td class="tg">'+escH(p.env)+'</td><td class="tg">'+escH(p.a)+'</td><td class="tg">'+escH(p.ca)+'</td>'+
+           '<td class="tg">'+escH(p.b)+'</td><td class="tg">'+escH(p.cb)+'</td></tr>';
+      }
+      h+='</tbody></table></div>';
+      h+='<p class="hint">共 '+D.minPairs.length+' 条最小对立实例，上表为等距抽样 30 条。</p>';
+    }
+    h+='</details>';
+  });
+  return h;
+}
+document.getElementById('btnLawsPhCsv').addEventListener('click',function(){
+  var dims=buildContrast(), rows=[];
+  rows.push(['维度','类型','音A','例字A','字数A','音B','例字B','字数B','共同环境','置信度']);
+  dims.forEach(function(D){
+    D.comp.forEach(function(p){ rows.push([D.label,'互补分布(疑似条件变体)',p.a,p.ca||'',p.na,p.b,p.cb||'',p.nb,'',p.conf]); });
+    D.minPairs.slice(0,200).forEach(function(p){ rows.push([D.label,'最小对立',p.a,p.ca,'',p.b,p.cb,'',p.env]); });
+  });
+  if(rows.length<2){ toast('无数据可导出'); return; }
+  download('音位核查_最小对立与互补分布.csv',csvFrom(rows),'text/csv;charset=utf-8');
+  toast('已导出音位核查 CSV');
+});
+
 /* ---------- exports ---------- */
 function download(name,content,mime){
   var blob=new Blob([content],{type:mime||"text/plain;charset=utf-8"});
@@ -1189,7 +1876,7 @@ document.getElementById("btnJson").addEventListener("click",function(){
 /* ---------- auto-save (localStorage, debounced) ---------- */
 var __saveTimer=null, __lastSavedAt=0;
 var SAVE_KEY="fangyan_draft";
-var DRAFT_VERSION=3; // 表结构升级版本：v3=声母再加等呼细分(見溪群曉匣精清從心邪 按洪/细拆) + v2(全浊分平仄+韵母开合等分)
+var DRAFT_VERSION=4; // v4=洪细改按韵环境判定(江摄二等→细等)，分组键变化，旧声韵填写需重填
 function fmtTime(ts){
   if(!ts) return "未保存";
   var d=new Date(ts);
@@ -1206,7 +1893,7 @@ function autoSave(){
   __saveTimer=setTimeout(function(){
     try{
       var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,
-              wordOverride:wordOverride,verifyData:verifyData,savedAt:Date.now(),ver:DRAFT_VERSION,
+              wordOverride:wordOverride,verifyData:verifyData,userSplits:userSplits,savedAt:Date.now(),ver:DRAFT_VERSION,
               dialectTones:dialectTones,diaoToTone:diaoToTone};
       localStorage.setItem(SAVE_KEY,JSON.stringify(d));
       setSaveStatus(d.savedAt);
@@ -1215,7 +1902,7 @@ function autoSave(){
 }
 /* ---------- draft ---------- */
 document.getElementById("btnSave").addEventListener("click",function(){
-  var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,savedAt:Date.now(),ver:DRAFT_VERSION,
+  var d={shengMap:shengMap,yunMap:yunMap,diaoMap:diaoMap,liZi:liZiStore,userSplits:userSplits,savedAt:Date.now(),ver:DRAFT_VERSION,
         dialectTones:dialectTones,diaoToTone:diaoToTone};
   d.wordOverride=wordOverride; d.verifyData=verifyData;
   localStorage.setItem(SAVE_KEY,JSON.stringify(d));
@@ -1238,7 +1925,7 @@ function applyDraft(d){
     rebuildAll(); infer(); renderCheck();
     return;
   }
-  shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{};
+  shengMap=d.shengMap||{}; yunMap=d.yunMap||{}; diaoMap=d.diaoMap||{}; userSplits=d.userSplits||{sheng:{},yun:{}};
   liZiStore=d.liZi||{};
   wordOverride=d.wordOverride||{}; verifyData=d.verifyData||{size:80,sample:[]};
   /* 声调模型 v2：优先用新格式 dialectTones+diaoToTone；旧草稿只有扁平 diaoMap 时，
@@ -1271,11 +1958,17 @@ document.getElementById("fileIn").addEventListener("change",function(ev){
   var rd=new FileReader();
   rd.onload=function(){
     try{
-      MODEL=JSON.parse(rd.result); entries=MODEL.entries||[];
+      MODEL=JSON.parse(rd.result);
+      /* 防呆：误把“草稿文件”当字表载入会清空三张表。草稿有 shengMap/yunMap 但无 entries，识别后拒绝 */
+      if(!MODEL.entries && (MODEL.shengMap||MODEL.yunMap)){
+        toast("⚠ 这看起来是“草稿文件”，不是字表 index.json。请用「导入草稿文件（完整恢复）」按钮载入，避免清空已填数据");
+        ev.target.value=""; return;
+      }
+      entries=MODEL.entries||[];
       bySheng={};byYun={};byDiao={};shengMap={};yunMap={};diaoMap={};
       entries.forEach(function(e){
-        var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG);
-        var sk=shengKey(s,d,qz,deng),yk=yunKey(y,hu,deng),dk=diaoKey(s,d,qz);
+        var s=dec(e.SHENG),y=dec(e.YUN),d=dec(e.DIAO),qz=dec(e.QZ),hu=dec(e.HU),deng=dec(e.DENG),she=dec(e.SHE);
+        var sk=shengKey(s,d,qz,deng,hu,she,y),yk=yunKey(y,hu,deng),dk=diaoKey(s,d,qz);
         (bySheng[sk]=bySheng[sk]||[]).push(e);(byYun[yk]=byYun[yk]||[]).push(e);
         (byDiao[dk]=byDiao[dk]||[]).push(e);
       });
@@ -1292,12 +1985,10 @@ document.getElementById("draftFileIn").addEventListener("change",function(ev){
   rd.onload=function(){
     try{
       var d=JSON.parse(rd.result);
-      /* 只灌 声母 + 韵母；例字/逐字覆盖/抽样/声调 一律不动，保留当前威县 4 调配置 */
-      shengMap=d.shengMap||{};
-      yunMap=d.yunMap||{};
-      rebuildAll(); infer(); renderCheck(); updateProgress();
-      autoSave();
-      toast("已导入草稿的声母("+Object.keys(shengMap).length+"类)与韵母("+Object.keys(yunMap).length+"类)，声调保持原配置未改动");
+      /* 完整恢复：声韵调 + 拆分 + 逐字修改 + 抽样 + 方言调配置，全部从草稿灌回（草稿即完整备份） */
+      applyDraft(d);
+      renderCheck(); updateProgress(); autoSave();
+      toast("已完整导入草稿：声母("+Object.keys(shengMap).length+")、韵母("+Object.keys(yunMap).length+")、声调("+dialectTones.length+")，拆分与逐字修改一并恢复");
     }catch(err){ toast("导入失败："+err.message); }
     ev.target.value="";
   };
@@ -1306,8 +1997,8 @@ document.getElementById("draftFileIn").addEventListener("change",function(ev){
 
 /* ---------- build ---------- */
 function buildAll(){
-  buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ");
-  buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ / əʔ");
+  buildTable("tblSheng",bySheng,function(k){return k;},null,shengMap,"如 p / pʰ / tʂ / ʂ","SHENG");
+  buildTable("tblYun",byYun,function(k){return k;},null,yunMap,"如 a / i / aŋ / əʔ","YUN");
   buildDiaoTab();
   syncDiaoMap();
   updateProgress();
