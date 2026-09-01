@@ -1913,7 +1913,7 @@ document.getElementById("btnSave").addEventListener("click",function(){
 document.getElementById("btnLoadDraft").addEventListener("click",function(){
   var raw=localStorage.getItem("fangyan_draft");
   if(!raw){toast("没有本地草稿");return;}
-  applyDraft(JSON.parse(raw)); toast("已读取本地草稿");
+  applyDraft(JSON.parse(raw)); infer(); renderPreview(); renderSystem(); updateProgress(); toast("已读取本地草稿");
 });
 function applyDraft(d){
   /* 旧版本草稿（声韵分组键已变）迁移：清空声韵表填写，保留逐字修改历史与抽样数据 */
@@ -1987,7 +1987,7 @@ document.getElementById("draftFileIn").addEventListener("change",function(ev){
       var d=JSON.parse(rd.result);
       /* 完整恢复：声韵调 + 拆分 + 逐字修改 + 抽样 + 方言调配置，全部从草稿灌回（草稿即完整备份） */
       applyDraft(d);
-      renderCheck(); updateProgress(); autoSave();
+      infer(); renderPreview(); renderSystem(); renderCheck(); updateProgress(); autoSave();
       toast("已完整导入草稿：声母("+Object.keys(shengMap).length+")、韵母("+Object.keys(yunMap).length+")、声调("+dialectTones.length+")，拆分与逐字修改一并恢复");
     }catch(err){ toast("导入失败："+err.message); }
     ev.target.value="";
@@ -2054,7 +2054,7 @@ document.getElementById("btnAExp").addEventListener("click",function(){
       if(dialectTones.length===0 || dialectTones.every(function(t){return !t.value;})){
         defaultTones(); syncDiaoMap(); rebuildAll();
       }
-      renderCheck();
+      infer(); renderPreview(); renderSystem(); renderCheck();
       setSaveStatus(d.savedAt||null);
       console.log("已自动读回上次草稿（保存于 "+fmtTime(d.savedAt)+"）");
     }catch(e){ defaultTones(); syncDiaoMap(); rebuildAll(); }
