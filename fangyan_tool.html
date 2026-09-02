@@ -325,6 +325,7 @@
         </label>
         <button id="btnVGen" class="btn">生成抽样表</button>
         <button id="btnVCalc" class="btn">计算误差</button>
+        <button id="btnVAcc" class="btn">估算总体正确率</button>
         <button id="btnVAllOk" class="btn ghost">全部标✓</button>
         <button id="btnVClearJ" class="btn ghost">清空判定</button>
         <button id="btnVSubmit" class="btn primary">提交校验结果</button>
@@ -1417,6 +1418,72 @@ function calcVerify(){
 }
 function norm(x){ return (x||"").trim().toLowerCase(); }
 
+/* ===== 用安全区（已抽样并完整判定提交的字）估计总体（含未抽样）一致率/正确率 =====
+   方法：安全区是按 声·韵·调 分层抽样得到的样本；以其一致率 q̂ 外推全表 3871 字。
+   字级"一致"= 声/韵/调三项均判定 ✓；"需修正"= 至少一项 ✗。
+   95% 置信区间含有限总体修正 FPC：SE = √[q̂(1−q̂)/n · (N−n)/(N−1)]。 */
+function calcSafeAccuracy(){
+  var safe = safeList();
+  var N = (typeof entries!=="undefined" && entries.length) || 3871;
+  if(safe.length < 1){ toast("安全区还没有字。先在抽样校验表逐字判定 ✓/✗ 并提交，字才会进入安全区。"); return; }
+  var n = safe.length, evalChars = 0, fixedChars = 0;
+  var fOk = {rs:0, ry:0, rd:0}, fTot = {rs:0, ry:0, rd:0};
+  var stratum = {};   // "ms|my|md" -> {tot, bad}
+  safe.forEach(function(s){
+    var stMap = {rs:s.rsState, ry:s.ryState, rd:s.rdState};
+    if(!(stMap.rs||stMap.ry||stMap.rd)) return;   // 旧格式无判定信息，跳过
+    evalChars++;
+    var chBad = false;
+    ["rs","ry","rd"].forEach(function(f){
+      var st = stMap[f]||"";
+      fTot[f]++;
+      if(st==="ok") fOk[f]++;
+      else if(st==="bad") chBad = true;
+    });
+    if(chBad) fixedChars++;
+    var k = (s.ms||"?")+"|"+(s.my||"?")+"|"+(s.md||"?");
+    if(!stratum[k]) stratum[k] = {tot:0, bad:0};
+    stratum[k].tot++; if(chBad) stratum[k].bad++;
+  });
+  if(evalChars < 1){ toast("安全区记录缺少判定信息，无法估算。"); return; }
+  var consistent = evalChars - fixedChars;
+  var q = consistent/evalChars, p = 1 - q;
+  var accS = fTot.rs ? fOk.rs/fTot.rs : NaN;
+  var accY = fTot.ry ? fOk.ry/fTot.ry : NaN;
+  var accD = fTot.rd ? fOk.rd/fTot.rd : NaN;
+  var rem = Math.max(0, N - evalChars);
+  var expAcc = rem*q, expErr = rem*p;
+  var se = Math.sqrt( q*(1-q)/evalChars * (N-evalChars)/(N-1) );
+  var lo = Math.max(0, q - 1.96*se), hi = Math.min(1, q + 1.96*se);
+  var pct = function(x){ return (x*100).toFixed(1); };
+  var skipped = n - evalChars;
+  var html = '<div class="acc-report">';
+  html += '<p><b>基于安全区（已抽样并完整判定的字）估计总体正确率</b></p>';
+  html += '<p>安全区共 <b>'+n+'</b> 字（可评估 '+evalChars+' 字'+(skipped? '，跳过旧格式 '+skipped+' 字':'')+'），占全表 '+pct(evalChars/N)+'%；全表共 '+N+' 字。</p>';
+  html += '<p style="margin:6px 0">字级一致率（正确率）：<span class="big">'+pct(q)+'%</span> '
+        + '<span class="hint">（95% 置信区间 '+pct(lo)+'% – '+pct(hi)+'%）</span></p>';
+  html += '<p class="hint">抽样中 '+consistent+' 字声/韵/调全部一致，'+fixedChars+' 字至少一项被修正（✗）。</p>';
+  html += '<p style="margin-top:6px">字段级正确率：声母 <b>'+pct(accS)+'%</b>（'+fOk.rs+'/'+fTot.rs+'）　'
+        + '韵母 <b>'+pct(accY)+'%</b>（'+fOk.ry+'/'+fTot.ry+'）　'
+        + '声调 <b>'+pct(accD)+'%</b>（'+fOk.rd+'/'+fTot.rd+'）</p>';
+  html += '<p style="margin-top:8px"><b>对剩余未抽样 '+rem+' 字的推断（按样本一致率外推）：</b></p>';
+  html += '<p style="margin:2px 0">预估一致（正确）字数 ≈ <b>'+Math.round(expAcc)+'</b> 字'
+        + ' <span class="hint">（区间 '+Math.round(rem*lo)+'–'+Math.round(rem*hi)+'）</span></p>';
+  html += '<p style="margin:2px 0">预估需修正字数 ≈ <b>'+Math.round(expErr)+'</b> 字</p>';
+  var arr = Object.keys(stratum).map(function(k){ return {k:k, tot:stratum[k].tot, bad:stratum[k].bad, rate:stratum[k].bad/stratum[k].tot}; })
+                  .filter(function(o){return o.bad>0;}).sort(function(a,b){ return b.bad-a.bad; });
+  if(arr.length){
+    html += '<p style="margin-top:8px"><b>错得最多的中古类（声|韵|调，按需修正字数）：</b></p><p>';
+    arr.slice(0,8).forEach(function(o){ html += o.k+'（'+o.bad+'/'+o.tot+'，'+pct(o.rate)+'%）　'; });
+    html += '</p>';
+  }
+  html += '<p class="hint" style="margin-top:8px">前提：抽样须对未抽样字具代表性（本工具按 声·韵·调 分层抽样、逐字诚实判定即满足）。'
+        + '此"正确率"=「方言音符合规律推导」的比例，非方言音本身绝对对错；置信区间随安全区增大而收窄，建议积累到数百字后再引用。</p>';
+  html += '</div>';
+  document.getElementById("vResult").innerHTML = html;
+  autoSave();
+}
+
 /* ================= 全字审核 ================= */
 function saveWordOverride(chrHex, field, neuVal, src){
   // field: 's'|'y'|'d ; src: 'audit'|'verify'
@@ -2261,6 +2328,7 @@ renderSubmitBar();        // 启动时同步「已验证字 N」计数（安全�
 /* ---------- 抽样校验 / 全字审核 事件绑定 ---------- */
 document.getElementById("btnVGen").addEventListener("click",genVerifySample);
 document.getElementById("btnVCalc").addEventListener("click",calcVerify);
+document.getElementById("btnVAcc").addEventListener("click",calcSafeAccuracy);
 document.getElementById("btnVSubmit").addEventListener("click",submitVerify);
 document.getElementById("btnVAllOk").addEventListener("click",function(){
   (verifyData.sample||[]).forEach(function(s){
