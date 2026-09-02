@@ -1429,6 +1429,9 @@ function calcSafeAccuracy(){
   var n = safe.length, evalChars = 0, fixedChars = 0;
   var fOk = {rs:0, ry:0, rd:0}, fTot = {rs:0, ry:0, rd:0};
   var stratum = {};   // "ms|my|md" -> {tot, bad}
+  // 安全区记录本身未存中古类，这里从内置字表(当前抽样行)按字反查，保证错得最多的中古类能正确分组
+  var rowMap = {};
+  (window.__rows || infer() || []).forEach(function(r){ if(r.chrHex) rowMap[r.chrHex]=r; });
   safe.forEach(function(s){
     var stMap = {rs:s.rsState, ry:s.ryState, rd:s.rdState};
     if(!(stMap.rs||stMap.ry||stMap.rd)) return;   // 旧格式无判定信息，跳过
@@ -1441,7 +1444,8 @@ function calcSafeAccuracy(){
       else if(st==="bad") chBad = true;
     });
     if(chBad) fixedChars++;
-    var k = (s.ms||"?")+"|"+(s.my||"?")+"|"+(s.md||"?");
+    var row = rowMap[s.chr];
+    var k = ((row&&row.ms)||s.ms||"?")+"|"+((row&&row.my)||s.my||"?")+"|"+((row&&row.md)||s.md||"?");
     if(!stratum[k]) stratum[k] = {tot:0, bad:0};
     stratum[k].tot++; if(chBad) stratum[k].bad++;
   });
