@@ -1142,35 +1142,38 @@ function safeCount(){ return (verifyData.safe||[]).length; }
 function genVerifySample(){
   var addN=parseInt(document.getElementById("vSize").value)||80;
   var rows=window.__rows||infer();
-  var sample=verifyData.sample||[];
-  var existing={};
-  sample.forEach(function(s){ existing[s.chr]=true; });
-  // 尚未抽样、且不在安全区的字，按 (声,韵,调) 三元组分层
+  // 本次生成【完全替换】当前抽样表；只排除已进安全区的字，保证抽出来的全是没校对过的新字
   var layers={};
   rows.forEach(function(r){
-    if(existing[r.chrHex] || isSafe(r.chrHex)) return;
+    if(isSafe(r.chrHex)) return;
     var k=r.ms+"|"+r.my+"|"+r.md;
     (layers[k]=layers[k]||[]).push(r);
   });
   var keys=Object.keys(layers);
-  var picked=[];
-  keys.forEach(function(k){ picked.push(layers[k][Math.floor(Math.random()*layers[k].length)]); }); // 每层先抽 1 个保证覆盖
-  var pool=[];
-  keys.forEach(function(k){ layers[k].forEach(function(r){ if(picked.indexOf(r)<0) pool.push(r); }); });
-  for(var i=pool.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=pool[i];pool[i]=pool[j];pool[j]=t;}
-  var need=Math.max(0, addN - picked.length);
-  picked=picked.concat(pool.slice(0,need));
-  // 新追加的行：真实音/状态均为空，标记 isNew（新·待判定）
+  if(!keys.length){ verifyData.sample=[]; renderVerifyTable(); toast("没有更多可抽样的字了（全部 "+rows.length+" 字已在安全区）"); return; }
+  // 每层先取 1 个代表（覆盖中古声·韵·调三元组），再按样本量 addN 严格封顶
+  function shuffle(a){ for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
+  shuffle(keys);
+  var rep=keys.map(function(k){ return layers[k][Math.floor(Math.random()*layers[k].length)]; });
+  var picked;
+  if(rep.length > addN){
+    picked = rep.slice(0, addN);                 // 层多于样本量：取前 addN 个（已打乱，保证多样覆盖）
+  }else{
+    var pool=[];
+    keys.forEach(function(k){ layers[k].slice(1).forEach(function(r){ pool.push(r); }); });
+    shuffle(pool);
+    picked = rep.concat(pool.slice(0, addN - rep.length));  // 层少则每层和 1 个，再随机补足到 addN
+  }
+  // 新行：真实音/状态均为空，标记 isNew（新·待判定）
   var added=picked.map(function(r){
     return {chr:r.chrHex, ch:r.chr, ms:r.ms, my:r.my, md:r.md,
             fs:r.fs, fy:r.fy, fd:r.fd,
             rs:"", ry:"", rd:"", rsState:"", ryState:"", rdState:"",
             rsSub:undefined, rySub:undefined, rdSub:undefined, isNew:true};
   });
-  verifyData.sample=sample.concat(added);
+  verifyData.sample=added;   // 完全替换：清空旧抽样表，换一批不在安全区的新字
   renderVerifyTable();
-  if(added.length){ toast("已追加 "+added.length+" 个新抽样字（共 "+verifyData.sample.length+" 字，安全区累计 "+safeCount()+" 字）；新字标「新·待判定」，三项校对完整后提交即移入安全区"); }
-  else { toast("没有更多可抽样的字了（全部 "+rows.length+" 字已在安全区或已抽样）"); }
+  toast("已生成 "+added.length+" 个新抽样字（全部不在安全区；安全区累计 "+safeCount()+" 字）。逐字点 ✓/✗ 判定，再点「提交校验结果」即整批移入安全区");
 }
 
 /* ===== 提交状态标识 =====
@@ -1320,41 +1323,22 @@ function clearVerifyOverride(chrHex, field, restoreVal){
 function submitVerify(){
   var sample=verifyData.sample||[];
   if(!sample.length){ showBlock("没有抽样数据可提交，请先点「生成抽样表」"); return; }
-  /* —— 提交前置校验：每项都必须判定，且 ✗ 必须填正确音，否则阻止并明确提醒 —— */
   var fmap={rs:"声",ry:"韵",rd:"调"};
-  var incomplete=[];
+  var nFix=0, nOk=0, nClear=0, nDone=0, nIncomplete=0;
+  var incompleteChars=[];
   sample.forEach(function(s){
     var miss=[];
     VER_FIELDS.forEach(function(f){
       var st=s[f+"State"]||"";
-      if(st==="") miss.push({f:f, type:"unjudged"});                 // 未判定
-      else if(st==="bad" && !(s[f]||"").trim()) miss.push({f:f, type:"novalue"}); // ✗ 未填音
+      if(st==="") miss.push(f);                                   // 未判定
+      else if(st==="bad" && !(s[f]||"").trim()) miss.push(f);     // ✗ 未填音
     });
-    if(miss.length) incomplete.push({ch:s.ch, miss:miss});
-  });
-  if(incomplete.length){
-    var novalue=incomplete.filter(function(x){return x.miss.some(function(m){return m.type==="novalue";});});
-    var unjudged=incomplete.filter(function(x){return x.miss.some(function(m){return m.type==="unjudged";});});
-    var msg="提交被阻止：有 "+incomplete.length+" 个字尚未校对完整，不能提交。";
-    if(novalue.length){
-      msg+="\n• "+novalue.length+" 个字标了✗但没填正确音："
-        +novalue.slice(0,10).map(function(x){
-            return x.ch+"("+x.miss.filter(function(m){return m.type==="novalue";}).map(function(m){return fmap[m.f];}).join("/")+"缺)";
-          }).join("、")+(novalue.length>10?"…":"");
+    if(miss.length){                       // 未判定完整：不进安全区，仅移出抽样表，下次可再抽
+      nIncomplete++;
+      incompleteChars.push(s.ch+"("+miss.map(function(f){return fmap[f];}).join("/")+"未判)");
+      return;
     }
-    if(unjudged.length){
-      msg+="\n• "+unjudged.length+" 个字有未判定项："
-        +unjudged.slice(0,10).map(function(x){
-            return x.ch+"("+x.miss.filter(function(m){return m.type==="unjudged";}).map(function(m){return fmap[m.f];}).join("/")+"未判)";
-          }).join("、")+(unjudged.length>10?"…":"");
-    }
-    msg+="\n请把以上字的 声/韵/调 全部判定（✓一致，或✗并填正确音）后再提交。";
-    showBlock(msg);
-    return;
-  }
-  /* —— 全部完整：生效并移入安全区 —— */
-  var nFix=0, nOk=0, nClear=0;
-  sample.forEach(function(s){
+    /* —— 三项齐全：生效并移入安全区 —— */
     VER_FIELDS.forEach(function(f){
       var val=(s[f]||"").trim();
       if(s[f+"State"]==="ok"){
@@ -1367,18 +1351,24 @@ function submitVerify(){
       }
     });
     addSafe(s);                // 三项都已判定 → 移入安全区（下次抽样不再出现），存完整已校记录
+    nDone++;
   });
   verifyData.submittedAt=Date.now();
   try{ infer(); renderPreview(); renderSystem(); renderCheck(); updateProgress(); renderAudit(); }catch(e){}
-  /* 已进安全区的字从当前抽样表移除（不再占用校对视图）；提交前已全部完整，此处即整批移出 */
-  verifyData.sample=sample.filter(function(s){ return !isSafe(s.chr); });
+  /* 提交后清空整个抽样表：已完整的进入安全区；未完整的移出（不进安全区），下次抽样可再次出现 */
+  verifyData.sample=[];
   renderVerifyTable();
   renderSafeList();            // 刷新安全区列表（含本次新进的字）
-  autoSave();                  // 仅自动保存（localStorage）；需导出用「导出校验表」或「保存草稿」
+  autoSave();                  // 仅自动保存到浏览器本地（localStorage）；不会下载文件
   var bb=document.getElementById("blockBox"); if(bb) bb.style.display="none";   // 成功则收起可能的旧提示
   var msg="已提交并自动保存：修正 "+nFix+" 处、确认一致 "+nOk+" 处";
   if(nClear) msg+="、撤销旧覆盖 "+nClear+" 处";
-  msg+="。这些字已移入安全区（累计 "+safeCount()+" 字），下次抽样不再出现。改动已作用于全表。";
+  msg+="。其中 "+nDone+" 字已移入安全区（累计 "+safeCount()+" 字），下次抽样不再出现。";
+  if(nIncomplete){
+    msg+=" 另有 "+nIncomplete+" 字未判定完整（如 "+incompleteChars.slice(0,6).join("、")+(incompleteChars.length>6?"…":"")+"），未进入安全区、已移出抽样表；补齐判定后再次点「提交校验结果」即可入安全区。";
+  }else{
+    msg+=" 抽样表已清空，点「生成抽样表」抽取下一批全新字。";
+  }
   toast(msg);
 }
 
